@@ -1,0 +1,8 @@
+{$SSH_MCP_DOMAIN} {
+    request_body {
+        max_size 2MB
+    }
+    reverse_proxy ssh-mcp:8000 {
+        flush_interval -1
+    }
+}

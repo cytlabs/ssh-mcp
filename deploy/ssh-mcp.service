@@ -1,0 +1,26 @@
+[Unit]
+Description=SSH MCP server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ssh-mcp
+Group=ssh-mcp
+WorkingDirectory=/opt/ssh-mcp
+EnvironmentFile=/etc/ssh-mcp/ssh-mcp.env
+ExecStart=/opt/ssh-mcp/.venv/bin/ssh-mcp serve --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
+StateDirectory=ssh-mcp
+StateDirectoryMode=0700
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=15
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target

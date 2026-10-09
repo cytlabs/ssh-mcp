@@ -1,0 +1,37 @@
+{
+  "http": {
+    "public_url": "https://ssh-mcp.example.com",
+    "listen_host": "127.0.0.1",
+    "listen_port": 8000,
+    "token_env": "SSH_MCP_TOKEN"
+  },
+  "limits": {
+    "max_sessions": 32,
+    "buffer_chars": 1048576,
+    "idle_timeout": 1800,
+    "retention_seconds": 600,
+    "connect_timeout": 15,
+    "file_timeout": 60,
+    "max_file_chunk": 262144
+  },
+  "servers": [
+    {
+      "id": "staging",
+      "description": "Staging server",
+      "host": "192.0.2.10",
+      "port": 22,
+      "username": "ops",
+      "known_hosts": "secrets/known_hosts",
+      "private_key": "secrets/staging_ed25519"
+    },
+    {
+      "id": "lab",
+      "description": "Password-authenticated lab server",
+      "host": "192.0.2.20",
+      "port": 2222,
+      "username": "ops",
+      "known_hosts": "secrets/known_hosts",
+      "password_env": "LAB_SSH_PASSWORD"
+    }
+  ]
+}

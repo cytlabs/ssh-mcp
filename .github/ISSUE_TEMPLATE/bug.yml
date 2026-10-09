@@ -1,0 +1,23 @@
+name: Bug report
+description: Report a reproducible problem without credentials or private command output.
+body:
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: SSH MCP version, Python version, target OS, client and transport.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Use a disposable target. Never include keys, tokens, passwords or private server data.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true

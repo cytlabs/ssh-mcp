@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>SSH MCP · 服务器控制台</title>
+    <link rel="stylesheet" href="/console/style.css" />
+    <script defer src="/console/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">跳转到主要内容</a>
+    <aside class="sidebar">
+      <a class="brand" href="/console"
+        ><span class="brand-mark" aria-hidden="true">›_</span
+        ><span>SSH MCP<small>SERVER CONSOLE</small></span></a
+      >
+      <div class="workspace-label">
+        <span class="workspace-icon">S</span
+        ><span>我的工作空间<small>Self-hosted workspace</small></span>
+      </div>
+      <p class="nav-caption">工作空间</p>
+      <nav aria-label="主导航">
+        <button data-view="servers" aria-current="page">
+          <span aria-hidden="true">▤</span>服务器<span
+            id="nav-count"
+            class="nav-count"
+            >—</span
+          >
+        </button>
+        <button data-view="sessions">
+          <span aria-hidden="true">›_</span>终端会话
+        </button>
+        <button data-view="clients">
+          <span aria-hidden="true">⇄</span>MCP 接入
+        </button>
+        <button data-view="activity">
+          <span aria-hidden="true">◷</span>操作记录
+        </button>
+      </nav>
+      <div class="sidebar-bottom">
+        <span class="protocol-dot"></span>连接与智能，彼此独立
+        <p>通用 SSH 能力 · MIT 开源</p>
+        <span id="version" class="mono">开发预览</span>
+      </div>
+    </aside>
+    <div class="workspace">
+      <header class="topbar">
+        <div>
+          工作空间 <span>/</span> <strong id="breadcrumb">服务器</strong>
+        </div>
+        <div class="account">
+          <span id="connection-label">尚未登录</span
+          ><button id="logout" class="text-button" hidden>退出登录</button
+          ><span class="avatar" aria-hidden="true">S</span>
+        </div>
+      </header>
+      <main id="main" tabindex="-1">
+        <section id="login-view" class="login-view">
+          <div class="login-copy">
+            <div class="eyebrow">YOUR SERVERS. CONNECTED.</div>
+            <h1>让 AI 连接服务器。<br /><span>让你掌握每一次连接。</span></h1>
+            <p>
+              集中管理 SSH 服务器，为你的 AI 客户端提供<br
+                class="desktop-break"
+              />可复用的终端与文件操作能力。
+            </p>
+            <div
+              class="connection-map"
+              aria-label="AI 客户端通过 SSH MCP 连接服务器"
+            >
+              <span>AI 客户端</span><i></i><b>›_ SSH MCP</b><i></i
+              ><span>你的服务器</span>
+            </div>
+          </div>
+          <form id="login-form" class="login-card">
+            <span class="section-kicker">管理控制台</span>
+            <h2>连接你的工作空间</h2>
+            <p>使用服务端设置的管理员 Token 登录。</p>
+            <label for="admin-token">管理员 Token</label
+            ><input
+              id="admin-token"
+              type="password"
+              autocomplete="off"
+              required
+              minlength="32"
+              placeholder="输入 SSH_MCP_ADMIN_TOKEN"
+            /><label class="checkbox-label"
+              ><input
+                id="remember"
+                type="checkbox"
+              />在此标签页内保持登录</label
+            >
+            <p id="login-error" class="form-error" role="alert"></p>
+            <button class="primary wide" type="submit">
+              进入控制台 <span aria-hidden="true">→</span>
+            </button>
+            <p class="login-help">
+              管理员 Token 与 AI 客户端的 MCP Token
+              分开设置。首次使用请在服务端配置。
+            </p>
+          </form>
+        </section>
+        <div id="app-view" hidden>
+          <section class="page-heading">
+            <div>
+              <div class="eyebrow" id="page-kicker">SERVER INVENTORY</div>
+              <h1 id="page-title">服务器</h1>
+              <p id="page-description">
+                管理连接目标，让 AI 在合适的服务器上工作。
+              </p>
+            </div>
+            <div class="heading-actions">
+              <button id="refresh" class="secondary">↻ 刷新</button
+              ><button id="add-server" class="primary">＋ 添加服务器</button>
+            </div>
+          </section>
+          <div id="page-content"></div>
+        </div>
+        <noscript
+          >此控制台需要启用 JavaScript。你也可以通过服务端 CLI
+          管理配置。</noscript
+        >
+      </main>
+      <footer>
+        SSH MCP <span>连接由服务提供，操作由你掌控。</span
+        ><span class="footer-right">独立部署 · SQLite</span>
+      </footer>
+    </div>
+    <div id="toast" class="toast" role="status" hidden></div>
+    <dialog id="server-dialog" aria-labelledby="server-dialog-title">
+      <form id="server-form">
+        <div class="dialog-heading">
+          <div>
+            <span class="section-kicker">SSH CONNECTION</span>
+            <h2 id="server-dialog-title">添加服务器</h2>
+          </div>
+          <button
+            type="button"
+            class="icon-button"
+            data-close="server-dialog"
+            aria-label="关闭"
+          >
+            ×
+          </button>
+        </div>
+        <p class="muted">
+          配置连接信息。凭据由服务端保管，AI 只会看到服务器名称与地址。
+        </p>
+        <div class="form-grid">
+          <label
+            >服务器 ID<input
+              name="id"
+              required
+              pattern="[a-zA-Z0-9_-]{1,64}"
+              maxlength="64"
+              placeholder="例如 staging" /></label
+          ><label
+            >备注<input
+              name="description"
+              maxlength="512"
+              placeholder="例如：产品测试环境" /></label
+          ><label
+            >主机地址<input
+              name="host"
+              required
+              maxlength="255"
+              placeholder="IP 或主机名" /></label
+          ><label
+            >SSH 端口<input
+              name="port"
+              type="number"
+              min="1"
+              max="65535"
+              value="22"
+              required /></label
+          ><label
+            >登录用户名<input
+              name="username"
+              required
+              maxlength="128"
+              placeholder="例如 ops" /></label
+          ><label
+            >认证方式<select name="auth">
+              <option value="private_key">SSH 私钥</option>
+              <option value="password_env">密码环境变量</option>
+            </select></label
+          >
+        </div>
+        <label id="credential-label"
+          >服务端私钥路径<input
+            name="credential"
+            required
+            placeholder="/etc/ssh-mcp/secrets/id_ed25519"
+        /></label>
+        <label id="passphrase-label"
+          >私钥口令环境变量 <span class="optional">选填</span
+          ><input name="passphrase_env" placeholder="例如 SSH_KEY_PASSPHRASE"
+        /></label>
+        <label
+          >已核验的主机公钥文件<input
+            name="known_hosts"
+            required
+            placeholder="/etc/ssh-mcp/secrets/known_hosts"
+        /></label>
+        <div class="form-note">
+          <span aria-hidden="true">◇</span>
+          <p>
+            填写服务端已有的文件路径或环境变量名称，不要粘贴密码或私钥内容。主机公钥需由管理员预先核验。
+          </p>
+        </div>
+        <p class="form-error" id="server-error" role="alert"></p>
+        <div class="dialog-actions">
+          <button type="button" class="secondary" data-close="server-dialog">
+            取消</button
+          ><button type="submit" class="primary">保存服务器</button>
+        </div>
+      </form>
+    </dialog>
+    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
+      <form method="dialog">
+        <div class="dialog-heading">
+          <h2 id="confirm-title">确认操作</h2>
+          <button class="icon-button" value="cancel" aria-label="关闭">
+            ×
+          </button>
+        </div>
+        <p id="confirm-description"></p>
+        <div class="dialog-actions">
+          <button value="cancel" class="secondary">取消</button
+          ><button value="confirm" class="danger">确认</button>
+        </div>
+      </form>
+    </dialog>
+  </body>
+</html>

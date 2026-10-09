@@ -1,0 +1,38 @@
+services:
+  ssh-mcp:
+    build:
+      context: ..
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./config:/config:ro
+      - ssh_mcp_data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    pids_limit: 128
+    mem_limit: 512m
+    # Internal network only; Caddy is the public HTTPS entry point.
+    expose: ["8000"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SSH_MCP_DOMAIN: ${SSH_MCP_DOMAIN:?Set SSH_MCP_DOMAIN in deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on: [ssh-mcp]
+
+volumes:
+  ssh_mcp_data:
+  caddy_data:
+  caddy_config:

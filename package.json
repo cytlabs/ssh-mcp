@@ -1,0 +1,17 @@
+{
+  "name": "ssh-mcp-console-tests",
+  "private": true,
+  "license": "MIT",
+  "description": "Development-only tests; the shipped console has no npm runtime dependency.",
+  "engines": {
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
+  },
+  "scripts": {
+    "test:ui": "node tests/console.dom.cjs",
+    "test:browser": "node tests/console.browser.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "30.1.2",
+    "playwright": "1.63.0"
+  }
+}
