@@ -84,7 +84,9 @@ def main():
                     request = json.loads(line)
                     messages = []
 
-                    async def receive(payload=request.get("body", "").encode()):
+                    payload = request.get("body", "").encode()
+
+                    async def receive(payload=payload):
                         return {"type": "http.request", "body": payload}
 
                     async def send(message, collected=messages):

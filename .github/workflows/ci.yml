@@ -9,7 +9,9 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     strategy:
+      fail-fast: false
       matrix:
         python: ["3.10", "3.12", "3.13"]
     steps:
@@ -28,12 +30,14 @@ jobs:
       - run: pip-audit
   container:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t ssh-mcp:ci .
       - run: docker run --rm ssh-mcp:ci --version
   console:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
