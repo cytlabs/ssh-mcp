@@ -6,16 +6,17 @@ SSH MCP 为 AI 客户端提供通用 SSH 连接、命令、终端和文件能力
 
 ## 开发环境
 
-使用 Linux/macOS、Python 3.10+ 和 pip/venv。集成测试需要 POSIX Shell 与 PTY，CI 在 Linux 上运行。
+使用 Linux/macOS、Python 3.10+ 和 uv 0.12.23。集成测试需要 POSIX Shell 与 PTY，CI 在 Linux 上运行。
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install --upgrade pip 'setuptools>=83.0.0'
-python -m pip install -e '.[dev]'
+python -m pip install uv==0.12.23
+uv sync --locked --extra dev --group build
 ruff check .
 SSH_MCP_REQUIRE_INTEGRATION=1 python -m unittest discover -s tests -v
-python -m build
+python -m build --no-isolation
+python scripts/check_wheel.py
 pip-audit
 ```
 
@@ -31,7 +32,7 @@ pip-audit
 本地已核对 Node.js 24.18.0。
 
 ```sh
-npm install
+npm ci
 npm run test:ui
 npx playwright install --with-deps chromium
 npm run test:browser
@@ -60,3 +61,7 @@ UI 测试使用临时 SQLite 和模拟 SSH。浏览器截图保存到被 Git 忽
 只有完成验证的提交才能打版本标签。公开源码不代表已经发布稳定版本。
 
 所有贡献遵循本仓库的 MIT 许可证。讨论应围绕具体问题和可复现证据展开。
+
+## 依赖与构建记录
+
+见 [可复现安装与构建](docs/reproducible-builds.md)。正常安装使用 `uv sync --locked` 和 `npm ci`，不要自动更新锁文件。

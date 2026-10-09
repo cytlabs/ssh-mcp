@@ -92,6 +92,8 @@ docker compose -p ssh-mcp -f deploy/compose.existing-proxy.yaml --env-file deplo
 `http.public_url` 必须包含实际的非标准端口。
 不要关闭 TLS 验证；当前控制台要求 `/console`、`/admin/`、`/mcp` 位于源地址根路径，不能直接假设任意子路径可用。
 
+依赖和构建流程见 [可复现安装与构建](reproducible-builds.md)。
+
 ## 原生进程与 systemd
 
 把项目安装到 `/opt/ssh-mcp/.venv`，创建专用 `ssh-mcp` 系统账户，
