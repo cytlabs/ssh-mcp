@@ -2,7 +2,15 @@
 
 日期：2026-10-09。版本：`0.1.0a1`（开发预览，未发布正式版本）。
 
-## 已完成的 GitHub CI 验证
+## 依赖锁定后验证（PR #5）
+
+提交 `632d7c70` 的 [CI](https://github.com/cytlabs/ssh-mcp/actions/runs/37889056073) 五个任务全部通过：Python 3.10/3.12/3.13 各 45 项测试、Ruff、非隔离打包、wheel 控制台资源检查、Python 依赖审计，以及 Docker 构建、DOM/桌面/手机浏览器流程与 npm 审计。
+
+`uv.lock` 与 `package-lock.json` 已提交；应用基础镜像固定摘要，CI 上传各 Python 版本安装包和构建记录。详见 [可复现安装与构建](reproducible-builds.md)。本轮没有部署生产服务器，也没有完成 OAuth 或真实 AI 客户端验收。
+
+本轮本地 45 项 Python 测试、DOM 9 项、打包与审计通过。Python 测试退出时出现 subprocess 事件循环清理警告，未导致测试失败；本地 Chromium 下载失败且无 Docker，相关验证采用上述 CI 结果。
+
+## 早期 GitHub CI 验证
 
 基线提交：[035ce343](https://github.com/cytlabs/ssh-mcp/commit/035ce343d30821660957325051b4783593dbe0b2)。
 [CI 第 3 次运行](https://github.com/cytlabs/ssh-mcp/actions/runs/37884474129) 的五个任务全部通过。
@@ -21,7 +29,7 @@
 
 Python 3.12 CI 的实际主要依赖：AsyncSSH 2.24.1、MCP SDK 1.30.0、Uvicorn 0.54.0、
 Ruff 0.16.10、pip-audit 2.10.1；完整安装日志在对应任务中。
-这是一份已运行记录，不是依赖锁文件。可复现构建继续由 [Issue #3](https://github.com/cytlabs/ssh-mcp/issues/3) 跟踪。
+这是一份已运行记录，不是依赖锁文件。后续锁文件和验证结果见上方 PR #5 记录。
 
 ## 真实协议测试覆盖
 

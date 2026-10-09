@@ -35,7 +35,8 @@ GitHub Actions 已运行真实回环 SSH/SFTP、HTTP/stdio MCP 集成测试，�
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
-python -m pip install -e '.[dev]'
+python -m pip install uv==0.12.23
+uv sync --locked --extra dev --group build
 cp config.example.json config.json
 mkdir -p secrets
 chmod 700 secrets
@@ -83,10 +84,12 @@ Token 区别、数据库位置和备份方式见 [管理控制台说明](docs/co
 ## 开发与验证
 
 ```sh
-python -m pip install -e '.[dev]'
+python -m pip install uv==0.12.23
+uv sync --locked --extra dev --group build
 ruff check .
 SSH_MCP_REQUIRE_INTEGRATION=1 python -m unittest discover -s tests -v
-python -m build
+python -m build --no-isolation
+python scripts/check_wheel.py
 pip-audit
 ```
 
