@@ -1,78 +1,64 @@
-# Architecture and decisions
+# 架构与设计决策
 
-## Product boundary
+## 产品边界
 
-One operator deploys a reusable MCP-to-SSH service for trusted AI clients. Servers
-and authentication material are configured out of band. The AI chooses targets
-and operations, while the operating system/SSH account controls actual permissions.
-There is no model provider, agent loop or business context store. A lightweight
-operator web console manages the same server inventory and sessions as MCP.
+一个可信操作者部署可复用的 MCP → SSH 服务，供自己的 AI 客户端使用。
+服务器及认证材料由管理员配置；AI 选择目标和操作，实际权限由远程 SSH 账户及操作系统决定。
+项目不包含模型供应商、Agent 循环或业务上下文系统。轻量管理控制台与 MCP 共用服务器列表和会话。
 
-## Components
+## 组件
 
-| Module | Responsibility |
+| 模块 | 职责 |
 | --- | --- |
-| `config.py` | Strict JSON, explicit credential references and public target metadata |
-| `cli.py` | Validate, list, generate operator token, launch HTTP or stdio |
-| `auth.py` | Constant-time bearer verification on every HTTP request and body limits |
-| `server.py` | Official MCP SDK tools, sanitized errors, lifecycle and metadata audit |
-| `ssh.py` | AsyncSSH connections, process lifetime, idle expiry and SFTP |
-| `buffer.py` | Per-stream bounded replay with explicit character loss |
-| `registry.py` | SQLite inventory, initial JSON import, edit revisions and bounded admin audit |
-| `console.py` / `static/` | Separate admin API, same-origin web UI, server/session/client management |
+| `config.py` | 严格校验 JSON，管理凭据引用及公开服务器元数据 |
+| `cli.py` | 配置检查、服务器列表、Token 生成、HTTP/stdio 启动 |
+| `auth.py` | 每次请求进行恒定时间 Token 比较，并限制请求体大小 |
+| `server.py` | 官方 MCP SDK 工具、错误脱敏、生命周期与操作元数据日志 |
+| `ssh.py` | AsyncSSH 连接、远程进程、会话过期和 SFTP |
+| `buffer.py` | 有容量上限、可重复读取的输出缓冲，明确报告字符丢失 |
+| `registry.py` | SQLite 清单、首次导入、编辑版本号及有条数上限的管理日志 |
+| `console.py` / `static/` | 独立管理员接口、同源网页、服务器/会话/客户端管理 |
 
-Python + AsyncSSH provides SSH and SFTP without invoking a local `ssh` executable.
-The official `mcp` Python SDK owns protocol handling and Streamable HTTP. The
-dependency constraint selects the SDK's v1 API; a v2 migration is a deliberate
-future change, not an implicit upgrade. Python 3.10 is the current minimum.
+Python + AsyncSSH 直接实现 SSH/SFTP，不依赖本地 `ssh` 可执行文件。
+官方 `mcp` Python SDK 负责 MCP 协议和 Streamable HTTP；当前依赖范围限定 v1 API，
+不会隐式升级到 v2。最低支持 Python 3.10。
 
-Protocol references: [MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x),
-[AsyncSSH API](https://asyncssh.readthedocs.io/en/stable/api.html).
+协议参考：[MCP Python SDK](https://github.com/modelcontextprotocol/python-sdk/tree/v1.x)、
+[AsyncSSH API](https://asyncssh.readthedocs.io/en/stable/api.html)。
 
-## Process lifetime
+## 进程与会话生命周期
 
-HTTP uses stateless MCP transport. SSH terminal state is separately keyed by a
-cryptographically random session ID in the single service worker. The caller can
-recover IDs with `list_sessions`. MCP initialization/disconnection does not own
-the SSH channel lifetime. A deployment-wide token represents one trust domain;
-IDs are not a substitute for authentication or multi-tenant authorization.
+HTTP 使用无状态 MCP 传输；SSH 会话状态独立保存在单个工作进程内，以随机会话 ID 索引。
+客户端可用 `list_sessions` 找回 ID。MCP 请求结束或客户端断线不会直接关闭 SSH 通道。
+整个实例使用一个 MCP Token，属于同一信任范围；会话 ID 不能代替认证或多租户权限控制。
 
-Each terminal owns one SSH connection, process, bounded stdout/stderr buffers,
-reader tasks and a completion monitor. Creation reserves a capacity slot before
-awaiting connection establishment. The monitor drains both streams concurrently
-and closes resources on completion, timeout or disconnect. The reaper expires
-idle shells and retained results; service shutdown closes all terminals.
+每个终端拥有独立 SSH 连接、远程进程、标准输出/错误缓冲、读取任务和完成监视任务。
+连接前先预留容量，避免并发连接突破上限。监视任务同时读取两个输出流，
+完成、超时或断线后关闭资源。后台清理任务回收空闲终端和到期结果；服务退出时关闭全部终端。
 
-SFTP connections are short-lived, with separate bounded concurrency and an
-operation deadline. Buffers and deadlines protect service resources, not command
-semantics. SSH signals cannot guarantee process-tree termination on every server.
+SFTP 使用短连接，另设并发上限和操作期限。这些限制保护服务资源，不限制命令的业务含义。
+SSH 信号不能保证结束所有已经脱离终端的远程子进程。
 
-## Authentication decisions
+## 认证选择
 
-Static bearer tokens are the first supported remote mode for clients that accept
-headers. HTTPS terminates at a supplied Caddy template or an existing proxy. The
-service verifies every HTTP request and checks Host/Origin through the SDK.
-It never trusts a user-supplied identity header and does not forward its bearer
-token to SSH targets. Credential rotation and runtime config changes require restart;
-console inventory edits persist in SQLite and update the worker immediately.
+首版远程模式面向支持请求头的客户端，使用静态 Bearer Token。
+由 Caddy 模板或现有代理终止 HTTPS，服务逐次验证请求并检查 Host/Origin。
+不信任客户端自行声明的身份请求头，也不会把 MCP Token 转发给 SSH 目标。
+凭据轮换及运行参数修改需要重启；网页修改服务器清单则保存到 SQLite，并立即更新当前工作进程。
 
-The console uses an independent `SSH_MCP_ADMIN_TOKEN`. MCP clients cannot use their
-token to edit the inventory or read credential references. Public static assets contain
-no inventory. Admin requests require bearer auth, Host/Origin validation and body limits.
-SQLite uses revision checks to prevent stale writes. Runtime terminals remain in memory.
+控制台使用独立的 `SSH_MCP_ADMIN_TOKEN`。MCP 客户端不能用自己的 Token 修改清单或读取凭据引用。
+公开静态资源不包含服务器数据；管理请求同样要求认证、Host/Origin 检查及请求体限制。
+SQLite 通过版本号防止旧页面覆盖新配置。终端仍只保存在进程内存，不进入数据库。
 
-OAuth is tracked separately because browser-based clients require discovery,
-redirect validation, PKCE, consent and token lifecycle. Faking those with a login
-form around a shared token would not satisfy the protocol. No OAuth metadata is
-advertised until that mode exists.
+OAuth 单独开发，因为浏览器客户端需要发现端点、重定向校验、PKCE、授权同意与 Token 生命周期。
+在共享 Token 外包一层登录页面不能满足这些要求。未实现前不发布 OAuth 元数据。
 
-## Future changes requiring a design review
+## 后续需要单独设计的扩展
 
-- Multi-user access: per-principal server grants, isolated sessions and identity-bound logs.
-- Multiple replicas: session ownership/routing and a defined failure-recovery contract.
-- Durable sessions: explicit tmux integration or a remote supervisor, with recovery semantics.
-- Browser OAuth: a tested identity provider/gateway integration and real-client acceptance.
-- Large artifact delivery: a separate authenticated streaming mechanism with expiry and limits.
+- 多用户：按身份授予服务器权限、隔离会话，并让日志关联身份。
+- 多副本：明确会话归属、请求路由和失败恢复方式。
+- 持久恢复：明确 tmux 或远程监督进程的接入与恢复语义。
+- 浏览器 OAuth：验证身份提供方/网关，并完成真实客户端验收。
+- 大文件交付：独立的带认证流式传输，设置过期时间和容量限制。
 
-Any extension should preserve the generic tool boundary and keep credentials out
-of discovery responses, errors and logs.
+扩展必须保留通用工具边界，不得在发现响应、错误和日志中泄露登录凭据。

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "ssh-mcp-server"
 version = "0.1.0a1"
-description = "Give MCP clients a real SSH terminal, without local SSH credentials."
+description = "让 AI 通过 MCP 使用真实 SSH 终端，登录凭据由服务端保管。"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

@@ -17,7 +17,7 @@
   "servers": [
     {
       "id": "staging",
-      "description": "Staging server",
+      "description": "测试服务器",
       "host": "192.0.2.10",
       "port": 22,
       "username": "ops",
@@ -26,7 +26,7 @@
     },
     {
       "id": "lab",
-      "description": "Password-authenticated lab server",
+      "description": "使用密码认证的实验服务器",
       "host": "192.0.2.20",
       "port": 2222,
       "username": "ops",

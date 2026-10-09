@@ -1,5 +1,5 @@
-# Standalone alternative to compose.yaml; do not combine the two files.
-# For a host-level TLS proxy. Confirm the chosen loopback port is free first.
+# 独立替代 compose.yaml，不要组合使用两个文件。
+# 供主机级 HTTPS 代理使用，启动前确认选定回环端口空闲。
 services:
   ssh-mcp:
     build:

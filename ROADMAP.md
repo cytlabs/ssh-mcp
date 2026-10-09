@@ -1,54 +1,61 @@
-# Product roadmap
+# 产品路线图
 
-## Purpose
+## 产品目标
 
-Give any compatible MCP client a general SSH terminal without distributing SSH
-credentials to that client. The service owns connections and execution; the client
-owns task planning. Initial users are individual developers/operators managing
-their own servers. The project is self-hosted and licensed under MIT.
+让兼容 MCP 的 AI 客户端使用通用 SSH 终端，而不向客户端分发 SSH 凭据。
+MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
+首版面向自行管理服务器的开发者与个人操作者，支持独立部署，采用 MIT 许可证。
 
-## 0.1 — Single-operator MVP
+## 0.1 — 单操作者 MVP
 
-Implementation is present for multi-target configuration, password/key auth,
-strict host-key checks, arbitrary commands, persistent PTYs, asynchronous output,
-SFTP chunks, HTTP bearer auth, stdio, CLI validation and bounded resources.
-Packaging, deployment templates, documentation and CI are included. The operator
-console and SQLite inventory are implemented; local DOM/API/persistence tests pass.
+源码已实现多目标配置、密码/密钥认证、主机密钥校验、任意命令、持久 PTY、
+异步输出、SFTP 分块传输、HTTP Bearer 认证、stdio、CLI 及资源限制。
+内置中文管理控制台和 SQLite，配套安装包、部署模板、中文文档和 CI。
 
-**Release status: blocked on validation, not yet accepted or published.**
+**当前是已公开源码的开发预览，不等同于完成生产部署或正式版本验收。**
 
-Acceptance requires an authenticated public HTTPS MCP client to list targets,
-execute a command, edit a file and run a test, without a manual SSH login during
-the interaction. Unit tests and local protocol fixtures do not alone satisfy that gate.
+验收要求：真实 AI 客户端通过带认证的公开 HTTPS MCP 入口完成服务器列表、命令执行、文件修改和测试运行，
+交互过程中不需要用户手动 SSH。单元测试或 SDK 测试不能独立满足这一条件。
 
-## Tracked work
+## 待办与完成证据
 
-These are local tracking IDs. No external GitHub issues have been created yet.
+下列编号保留产品规划中的引用，未完成事项已关联实际 GitHub Issues。
 
-| ID | Status | Work and completion evidence |
+| 编号 | 状态 | 内容与完成条件 |
 | --- | --- | --- |
-| MCP-001 | Blocked by development environment | Install runtime/dev dependencies; pass real SSH/SFTP + HTTP/stdio tests, lint, package build, dependency audit and Docker build. Record resolved dependency versions. Current environment has unavailable package network access. |
-| MCP-002 | Planned | OAuth-capable gateway/IdP integration or native OAuth, including discovery, PKCE, consent, refresh/revocation, audience checking and browser-client acceptance. Needed for the documented ChatGPT OAuth flow. |
-| MCP-003 | Deployment authorized; SSH access blocked | Operator has selected a production host. Current execution environment denies SSH socket creation and sandbox escalation. Inspect existing services/proxy after access is available, choose a trusted HTTPS origin, run isolated integration tests before deploying, then record real client acceptance and bounded live SSH checks. Private host details and credentials stay outside this repository. |
-| MCP-004 | Pending release | Confirm public project/package name, enable private vulnerability reporting, record tested dependency resolution, choose a version tag and publish only after release gates pass. |
-| MCP-005 | Implemented; browser QA blocked | Operator console and SQLite inventory. Python API/persistence tests and DOM-to-SQLite workflows passed. Current sandbox rejects loopback listeners and Chromium startup; desktop/mobile rendering and real SSH console flow still need verification. |
+| MCP-001 | 已完成自动化验证 | Python 3.10/3.12/3.13 各 45 项测试、Ruff、构建和依赖审计通过；容器及浏览器任务通过。见 [验证记录](docs/verification.md)。 |
+| [MCP-002 / #2](https://github.com/cytlabs/ssh-mcp/issues/2) | 待开发 | OAuth 网关/身份提供方或原生 OAuth，包含发现端点、PKCE、同意、刷新/撤销、目标受众校验及浏览器客户端验收。用于已记录的 ChatGPT OAuth 接入流程。 |
+| [MCP-003 / #1](https://github.com/cytlabs/ssh-mcp/issues/1) | 已授权部署，当前会话 SSH 受限 | 已选定生产主机，当前执行环境禁止 SSH socket 与沙箱外执行。恢复访问后检查现有服务和代理，确定可信 HTTPS 入口，通过隔离集成测试后部署，再执行真实客户端和低影响 SSH 验收。私人地址与凭据不进入仓库。 |
+| [MCP-004 / #4](https://github.com/cytlabs/ssh-mcp/issues/4) | 源码已提交，正式发布待完成 | 仓库已建立为 cytlabs/ssh-mcp。仍需核实私密漏洞报告、软件包命名、依赖记录及发布条件；验收完成后再打标签或发布安装包。 |
+| MCP-005 | 已实现并通过自动浏览器检查 | 中文控制台、SQLite、管理 API、DOM 流程及桌面/手机浏览器脚本已验证；线上真实 SSH 操作仍随部署验收完成。 |
+| [MCP-006 / #3](https://github.com/cytlabs/ssh-mcp/issues/3) | 待完成 | 锁定部署/测试依赖，提交 npm 锁文件，记录构建环境并验证可复现构建。 |
 
-## 0.2 — Client reach and operator ergonomics
+## 本轮收尾清单
 
-- OAuth integration and actual ChatGPT/Claude browser-client acceptance.
-- Optional operator CLI parity with the SQLite-backed web console.
-- Connection diagnostics that keep secrets out of returned errors and logs.
-- Checked dependency lock and a documented compatibility matrix.
+- [x] 前端、SQLite、SSH/MCP 核心源码提交到 GitHub。
+- [x] 默认首页、项目文档、协作模板及 CLI/MCP 工具说明改为中文。
+- [x] 完成 45 项协议与功能测试，以及容器、浏览器、依赖审计。
+- [x] 修复 CI 已发现的 lint 和打包工具审计问题。
+- [x] 更新验证记录，并将未完成问题建立为 Issues。
+- [ ] 生产部署、IP HTTPS 与真实客户端验收（#1）。
+- [ ] OAuth 和 ChatGPT 接入（#2）。
+- [ ] 依赖锁定与可复现构建（#3）。
+- [ ] 私密漏洞报告渠道和首次正式发布（#4）。
 
-## Later, driven by use
+## 0.2 — 客户端覆盖与管理体验
 
-- Per-user identity and server grants if deployments need multiple trust domains.
-- Durable terminal recovery with an explicit remote supervision contract.
-- Large artifact transfer outside MCP text messages, with authenticated delivery.
+- OAuth 和真实 ChatGPT/Claude 浏览器客户端验收。
+- 与 SQLite 网页操作一致的管理员 CLI。
+- 不泄露秘密的连接诊断。
+- 经验证的依赖锁定与兼容矩阵。
 
-## Non-goals
+## 根据实际使用继续演进
 
-No embedded AI model or planning loop; no business action catalog; no command
-allowlist; no complex dashboard; no hidden reading of unrelated SSH configs or
-agents; no claims that arbitrary root execution can be made credential-isolated
-on the same host by application filtering.
+- 多用户身份及按服务器授权。
+- 有明确定义的远程进程管理和终端恢复。
+- MCP 文本消息之外的带认证大文件流式传输。
+
+## 不在当前范围内
+
+不内置模型或任务规划循环，不开发业务专用工具，不设置命令白名单，
+不隐式读取无关 SSH 配置或 Agent，不承诺用应用输出过滤隔离同机 root 权限。

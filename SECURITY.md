@@ -1,76 +1,58 @@
-# Security policy and boundaries
+# 安全说明与漏洞反馈
 
-## Intended trust model
+## 信任模型
 
-SSH MCP is a remote administration capability for one operator and their trusted
-clients. Possession of its bearer token grants the ability to run arbitrary
-commands using every configured SSH account. There is no command allowlist,
-per-operation confirmation, multi-user authorization or read-only account mode.
-Use remote OS account permissions to enforce the access you intend.
+SSH MCP 面向一个操作者及其可信客户端。持有 MCP Token 即可使用所有已配置的 SSH 账户执行任意命令。
+本项目没有命令白名单、逐操作确认、多用户授权或独立只读账户模式。
+所需操作权限由远程操作系统账户落实。
 
-Credential management is exclusively operator-side. Public server metadata omits
-private-key paths, password/passphrase environment references and secret values.
-SSH failures are converted to safe errors. Audit logs omit command/input/output
-and credential material. Ambient SSH agents, default keys and user SSH config
-are not used. Every configured target requires an explicit verified `known_hosts`.
+凭据仅由管理员维护。MCP 公开服务器元数据不包含私钥路径、密码/口令环境变量引用或秘密值。
+SSH 失败转换成经过处理的错误；日志不记录命令正文、输入输出或凭据。
+服务不使用隐式 SSH Agent、默认密钥或用户 SSH 配置。
+每个目标都必须指定已核验的 `known_hosts`。
 
-## Credential isolation
+## 凭据隔离边界
 
-The service account must be able to read configured SSH credentials, but target
-accounts should not be able to read the service configuration, files or process
-environment. If a target account has root on the MCP deployment host, arbitrary
-shell commands can read those secrets. No application-level promise can prevent
-that while granting full root shell access. Use a separate host or an OS boundary
-appropriate to your trust model.
+MCP 服务账户需要读取配置的 SSH 凭据；目标账户应无法读取 MCP 服务配置、文件及进程环境。
+如果目标账户同时拥有 MCP 部署主机的 root 权限，任意 Shell 命令就能读取这些秘密。
+应用层无法在授予完整 root 能力的同时保证这类隔离，需要另设主机或合适的操作系统权限边界。
 
-Remote command/file output may itself contain secrets stored on the target. SSH
-MCP returns the requested content; it does not attempt unreliable blanket output
-redaction. Keep service login credentials outside target-readable locations.
+远程命令或文件本身可能包含目标机器上的敏感信息。SSH MCP 返回用户请求的内容，
+不会承诺把任意输出中的所有秘密自动识别并遮盖。请把服务登录凭据保存在目标账户无法读取的位置。
 
-## Remote endpoint
+## 远程入口
 
-- Terminate HTTPS at the supplied Caddy deployment or an existing trusted proxy.
-- Keep the backend port private; a deployment with publicly accessible plaintext
-  HTTP does not meet this project's remote deployment requirements.
-- Generate a random bearer token, protect its client/server storage and rotate it
-  with a service restart. Do not put it in URLs or conversations.
-- `/mcp` requests require the MCP token, including protocol initialization.
-- `/admin/` requests require a different administrator token. Public `/console`
-  assets contain no server inventory or credentials. Never give an AI the admin token.
-- SDK Host/Origin checks remain enabled. Configure the actual public origin.
-- Configure proxy request-size/time limits; avoid proxy logs containing headers or bodies.
-- A shared token is a shared trust domain. Session IDs do not isolate users.
+- 使用 Caddy 或可信的现有代理提供 HTTPS，后端明文端口保持私有。
+- MCP Token 应随机生成、妥善保存并可轮换，不放入 URL 或对话。
+- `/mcp` 的所有请求，包括协议初始化，都要求 MCP Token。
+- `/admin/` 要求另一个管理员 Token；公开 `/console` 静态文件不包含清单或凭据。
+- 不要把管理员 Token 交给 AI 客户端。
+- 保持 Host/Origin 校验启用，并配置实际公开地址。
+- 设置代理请求大小和超时限制，避免记录请求头及请求体。
+- 共享 Token 代表共享权限，会话 ID 不提供用户间隔离。
 
-Tool annotations inform client UX; they are not authorization. Arbitrary shell,
-interactive input and upload/delete tools are conservatively marked destructive.
-Outputs from remote servers may contain prompt injection; clients must treat
-them as untrusted data and retain their normal user approval behavior.
+工具注解只帮助客户端理解操作，不是授权机制。任意 Shell、交互输入及上传/删除工具标记为可能有破坏性。
+服务器输出可能包含提示注入；客户端应将其视为不可信数据，并保留自身的正常授权流程。
 
-## Resource and termination limits
+## 存储与资源限制
 
-The operator console stores server metadata, credential references and bounded
-management audit records in SQLite. It returns credential references only to the
-human admin API, never MCP discovery. It does not store raw SSH passwords or private
-keys in the database. Protect the database as private infrastructure information.
-Optional tab-scoped login uses sessionStorage; it is not an HttpOnly cookie or a
-multi-user session system. The UI uses a restrictive CSP and renders remote output
-as text, not HTML. Full browser rendering verification remains pending.
+SQLite 保存服务器元数据、凭据引用和有限条数的管理记录，不保存 SSH 密码或私钥正文。
+凭据引用只供管理员接口使用，不通过 MCP 发现接口返回。数据库应按私人基础设施信息保护。
+可选的标签页登录状态使用 `sessionStorage`，不是 HttpOnly Cookie 或多用户会话系统。
+页面使用严格 CSP，将远程内容显示为文本。已执行的浏览器检查范围见 [验证记录](docs/verification.md)。
 
-Connection and file operations have deadlines. Command jobs have explicit
-timeouts; shells have idle expiry. Output buffers, file chunks, terminal counts
-and directory listings are bounded. Completed output is retained temporarily.
-Closing/terminating an SSH channel is best effort and cannot guarantee removal
-of daemonized or disowned remote children. There is no durable output archive.
+连接和文件操作有截止时间，命令有超时，Shell 有空闲回收。
+输出缓冲、文件块、终端数量和目录条目均有上限，完成后的输出只保留一段时间。
+关闭 SSH 通道只能尽力终止相关进程，不能保证结束已经后台化或脱离终端的子进程。
+本版本不提供持久输出归档。
 
-## Reporting
+## 漏洞反馈
 
-This repository is in pre-release development, with no public security contact
-or hosted service yet. Before opening the repository publicly, maintainers must
-enable GitHub private vulnerability reporting and verify that the Security tab
-provides a private report action. Use that channel for vulnerabilities once enabled.
-Do not post credentials, exploit details against real servers, or private command
-output in public issues. Ordinary sanitized bugs can use the bug template.
+仓库：[cytlabs/ssh-mcp](https://github.com/cytlabs/ssh-mcp)。目前仍为开发预览，尚无稳定版本支持周期。
+维护者需核实 GitHub 私密漏洞报告是否已启用；当前尚未确认该设置。
+若 Security 页面提供私密报告入口，请通过该入口提交漏洞。
+若没有私密入口，可先在 Issue 中请求建立联系方式，不要公开漏洞细节或真实服务器数据。
+普通问题可使用经过脱敏的问题反馈模板。
 
-Only the current development version is being maintained; there is no stable
-security-support window yet. Dependency audits and integration validation must
-pass before a public release. See [release gates](ROADMAP.md).
+不要在公开 Issue 中发布密钥、Token、密码、针对真实目标的利用细节或私人命令输出。
+正式版本发布前必须通过依赖审计和集成验证，详见 [产品路线图](ROADMAP.md)。

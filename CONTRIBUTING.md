@@ -1,17 +1,17 @@
-# Contributing
+# 贡献指南
 
-SSH MCP gives AI clients general-purpose server access through SSH. Contributions
-should improve connectivity, execution, terminals, files or interoperability.
-Business-specific tools and an embedded agent framework are outside scope.
+SSH MCP 为 AI 客户端提供通用 SSH 连接、命令、终端和文件能力。
+贡献应围绕这些能力及客户端互通展开；不引入业务专用工具或内置 Agent 框架。
+项目文档、Issue、PR 说明和提交说明使用中文。协议字段、代码标识符及标准文件名沿用现有约定。
 
-## Set up
+## 开发环境
 
-Use Linux/macOS with Python 3.10+ and pip/venv. The integration suite uses POSIX
-shells and PTYs; CI runs Linux.
+使用 Linux/macOS、Python 3.10+ 和 pip/venv。集成测试需要 POSIX Shell 与 PTY，CI 在 Linux 上运行。
 
 ```sh
 python3 -m venv .venv
 . .venv/bin/activate
+python -m pip install --upgrade pip 'setuptools>=83.0.0'
 python -m pip install -e '.[dev]'
 ruff check .
 SSH_MCP_REQUIRE_INTEGRATION=1 python -m unittest discover -s tests -v
@@ -19,49 +19,44 @@ python -m build
 pip-audit
 ```
 
-Do not use production SSH targets for automated tests. The integration fixture
-generates temporary host/user keys and password credentials, runs encrypted SSH
-and SFTP on loopback, and tests an HTTP MCP client against real subprocesses.
-The separate lifecycle suite uses a transport fake to test races and timeouts
-deterministically; that suite alone does not establish interoperability.
+自动测试不能使用生产 SSH 目标。集成夹具生成临时主机密钥、用户密钥和密码，
+通过回环地址运行真实加密 SSH/SFTP、子进程和 HTTP MCP 客户端。
+生命周期单元测试另用模拟传输验证并发、取消和超时，不能单独证明真实互通。
+需要测试管理员授权的服务器时，使用独立的 [低影响 SSH 检查](docs/live-ssh-check.md)。
+该脚本不进入自动测试或 CI，默认不写远程文件。
 
-For a separately authorized operator target, use the opt-in
-[live SSH check](docs/live-ssh-check.md). It is excluded from automated CI and
-defaults to checks without file writes.
+## 前端测试
 
-## Console tests
+正式前端不需要构建；Node.js 只用于开发测试。版本要求见 `package.json`，
+本地已核对 Node.js 24.18.0。
 
-The shipped console is buildless; Node.js is only needed for development tests.
-Use the Node version range in `package.json` (locally checked with 24.18.0).
-Run `npm install`, `npm run test:ui`, then `npx playwright install --with-deps chromium`
-and `npm run test:browser` in an environment supporting local listeners and Chromium.
-The UI tests use disposable SQLite and simulated SSH. Screenshots land in the
-ignored `test-results/` directory. Real SSH verification remains in the Python
-integration suite. See [console documentation](docs/console.md).
+```sh
+npm install
+npm run test:ui
+npx playwright install --with-deps chromium
+npm run test:browser
+```
 
-## Changes and review
+UI 测试使用临时 SQLite 和模拟 SSH。浏览器截图保存到被 Git 忽略的 `test-results/`。
+真实 SSH 协议验证由 Python 集成测试负责。详见 [管理控制台](docs/console.md)。
 
-1. Describe the user-visible problem and expected result in an issue or pull request.
-2. Keep tool names/contracts stable; explain incompatible changes and migration.
-3. Add meaningful tests for changed authentication, lifecycle or file behavior.
-4. Update relevant docs and `CHANGELOG.md`, including any remaining limitations.
-5. Report checks actually run. Do not convert skipped integration tests to a pass.
+## 修改与评审
 
-Never commit real inventories, credentials, private keys, `.env` files or command
-transcripts. Example addresses must be reserved examples. Logs and errors must
-not expose credentials, input text or arbitrary library exception messages.
+1. 说明用户遇到的问题、触发条件和修改后的行为。
+2. 保持工具名称及调用约定稳定；不兼容变更要说明迁移方法。
+3. 认证、生命周期或文件操作的变更应配有能够证明行为的测试。
+4. 同步相关文档及 `CHANGELOG.md`，明确仍未完成的内容。
+5. 只报告实际执行的检查，不能把跳过的集成测试记为通过。
 
-Configuration examples and deployment templates are part of the public product.
-Review their defaults as carefully as code. New dependencies need a concrete
-reason and a license compatible with distributing this MIT project.
+不要提交真实服务器清单、凭据、私钥、`.env` 或私人命令输出。
+示例地址使用保留的示例地址；日志和错误不能泄露凭据、输入正文或底层异常中的敏感信息。
+配置样例和部署模板也是产品的一部分，需审查其默认值。
+新增依赖应有明确用途，许可证应允许本项目按 MIT 发布。
 
-## Release process
+## 版本发布
 
-Before the first public release, close the release gates in `ROADMAP.md`, resolve
-and record a tested dependency set, build the wheel/container in CI, enable private
-vulnerability reporting, and verify package/repository naming availability.
-Tag only a commit whose checks and real-client acceptance are recorded. Publishing
-to a registry or making the repository public is a separate maintainer action.
+首个正式版本前，完成 `ROADMAP.md` 中的发布条件，记录实际测试的依赖版本，
+通过安装包、容器及真实客户端验收，并核实漏洞报告渠道和软件包名称。
+只有完成验证的提交才能打版本标签。公开源码不代表已经发布稳定版本。
 
-Contributions are made under the repository's MIT license. Keep discussion
-respectful, technical and focused on reproducible behavior.
+所有贡献遵循本仓库的 MIT 许可证。讨论应围绕具体问题和可复现证据展开。

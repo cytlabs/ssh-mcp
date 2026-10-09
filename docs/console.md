@@ -88,5 +88,6 @@ DOM 测试通过标准输入输出连接真实管理接口与临时 SQLite，只
 可单独运行 `PYTHONPATH=src python3 tests/preview_console.py` 查看**测试夹具**；
 它不连接真实服务器，也不是生产启动方式。夹具 Token 仅用于测试，写在测试源码中。
 
-当前环境的 DOM/API/SQLite 测试已运行。端口监听和 Chromium 启动受环境限制，
-因此视觉与浏览器验收仍待执行；不能将 DOM 测试当作视觉或真实 SSH 验收。
+本地 DOM/API/SQLite 测试已通过；GitHub Actions 中的 Chromium 桌面/手机流程也已通过并上传截图。
+本地端口监听和浏览器启动仍受环境限制，线上真实 SSH 控制台流程尚待部署验收。
+具体范围见 [验证记录](verification.md)，不能把模拟 SSH 的浏览器流程当作真实服务器验收。

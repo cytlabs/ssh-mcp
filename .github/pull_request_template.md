@@ -1,8 +1,8 @@
-## Problem and resulting behavior
+## 问题与修改后的行为
 
-Describe what changes for an MCP client or operator.
+说明 MCP 客户端或管理员在什么情况下遇到问题，以及本次修改后的结果。
 
-## Verification
+## 验证情况
 
-List the checks actually run and any unverified behavior. Include SSH/MCP integration
-coverage for protocol or session changes. Do not include credentials or private output.
+列出实际执行的检查与尚未验证的部分。协议或会话变更应包含 SSH/MCP 集成测试结果。
+不要包含凭据或私人输出。

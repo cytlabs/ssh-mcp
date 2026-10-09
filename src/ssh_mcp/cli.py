@@ -1,4 +1,4 @@
-"""Small operator CLI. Config editing stays outside the AI tool surface."""
+"""SSH MCP 管理命令：启动服务、检查配置、查看服务器和生成 Token。"""
 
 from __future__ import annotations
 
@@ -22,11 +22,11 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
     for name in ("serve", "check", "list-servers"):
         command = sub.add_parser(name)
-        command.add_argument("--config", default="config.json")
-        command.add_argument("--database", help="SQLite inventory; default: data/ssh-mcp.sqlite3 beside config")
+        command.add_argument("--config", default="config.json", help="运行配置 JSON 路径")
+        command.add_argument("--database", help="SQLite 路径，默认在配置目录的 data/ssh-mcp.sqlite3")
         if name == "serve":
             command.add_argument("--transport", choices=["http", "stdio"], default="http")
-    sub.add_parser("generate-token", help="Print a new token for an operator to store securely")
+    sub.add_parser("generate-token", help="生成随机 Token，请由管理员安全保存")
     args = parser.parse_args()
     if args.command == "generate-token":
         print(secrets.token_urlsafe(48))
@@ -42,7 +42,7 @@ def main() -> None:
             finally:
                 registry.close()
         if args.command == "list-servers":
-            print(json.dumps([s.public() for s in config.servers], indent=2))
+            print(json.dumps([s.public() for s in config.servers], ensure_ascii=False, indent=2))
         elif args.command == "check":
             for server in config.servers:
                 for path in (server.known_hosts, server.private_key):
@@ -50,7 +50,7 @@ def main() -> None:
                         raise ConfigError("A configured known_hosts or private key file is missing")
                 server.credentials()
             config.token()
-            print(f"Configuration valid: {len(config.servers)} server(s). SSH connectivity not tested.")
+            print(f"配置校验通过：共 {len(config.servers)} 台服务器。尚未测试 SSH 连接。")
         else:
             from .server import create_http_app, run_stdio
             logging.basicConfig(level=logging.WARNING, stream=sys.stderr)
@@ -67,8 +67,8 @@ def main() -> None:
                             port=config.listen_port, workers=1, access_log=False,
                             proxy_headers=False, log_level="warning")
     except (ConfigError, InputError, OSError, sqlite3.Error):
-        print("Configuration or startup failed. Check JSON fields, secret environment variables, "
-              "key/known_hosts files, SQLite permissions and listen address. No credentials were printed.", file=sys.stderr)
+        print("配置校验或启动失败。请检查 JSON 字段、秘密环境变量、密钥/known_hosts 文件、"
+              "SQLite 权限及监听地址。未输出任何凭据。", file=sys.stderr)
         raise SystemExit(2) from None
 
 

@@ -1,49 +1,46 @@
-# Opt-in live SSH check
+# 低影响真实 SSH 联调
 
-Use this only against a target explicitly authorized by its operator. It is separate
-from the disposable loopback integration suite and never runs in CI or test discovery.
-Prefer a test server. An existing production target can be checked with the same
-bounded workflow when its operator authorizes it.
+仅用于管理员明确授权的服务器。此脚本独立于临时回环集成测试，不进入 CI 或 unittest 自动发现。
+优先选择测试服务器；已有业务的生产目标必须在操作者授权范围内执行。
 
-Install the project dependencies **on the MCP host**, then supply a private JSON
-configuration following [deployment](deployment.md). The script reads that JSON
-directly; it does not change or read the console's SQLite inventory. Explicitly set
-the SSH identity and a previously verified `known_hosts` file. A working local
-`ssh` command may depend on an agent or SSH config: the product deliberately requires
-explicit credentials and does not inherit either. Do not disable host-key checks or
-put keys, passwords or real inventory into Git.
+## 准备与执行
 
-From the repository root:
+在 **MCP 主机**安装项目依赖，按 [部署说明](deployment.md) 准备私人 JSON 配置。
+脚本直接读取该 JSON，不读取或修改控制台 SQLite 清单。
+明确指定 SSH 身份和已经核验的 `known_hosts`。
+本机 `ssh` 能连接可能依赖 SSH Agent 或用户配置，而本产品要求显式配置凭据，不隐式继承二者。
+不要关闭主机密钥校验，也不要把密钥、密码和真实服务器清单放进 Git。
+
+在仓库根目录执行：
 
 ```sh
 PYTHONPATH=src python3 scripts/smoke_ssh.py --config config.json --server staging
-# Also exercise file operations, when authorized:
+# 已授权文件操作时，增加以下选项：
 PYTHONPATH=src python3 scripts/smoke_ssh.py --config config.json --server staging --files
 ```
 
-The default checks verify authentication, standard output/error, exit code 7,
-a one-second delayed command, PTY input and retained working directory. They use
-only test shell processes and change the working directory of that test shell.
-The remote host needs a POSIX shell and ordinary `sleep`, `mkdir`, `rm`, `rmdir`
-commands; file checks also require SFTP. No software is installed remotely.
+默认检查认证、标准输出/错误、退出码 7、一秒延迟命令、PTY 输入及工作目录保留。
+只创建测试 Shell 进程，并修改该 Shell 的工作目录。
+目标需要 POSIX Shell 及常规的 `sleep`、`mkdir`、`rm`、`rmdir` 命令；文件检查还需要 SFTP。
+脚本不在远程安装软件。
 
-`--files` exclusively creates a random `/tmp/ssh-mcp-smoke-<32 hex characters>`
-directory with mode 0700, writes and reads a small text/binary test file, deletes
-that exact file and removes the empty directory. Cleanup runs in `finally` after
-confirmed creation, uses no wildcards or recursive deletion, and refuses paths
-outside that exact naming pattern. A network interruption or forced process kill
-can leave a directory behind; review the reported path before manual cleanup.
-The script never reads application files, inspects environment variables, restarts
-services, changes system configuration or performs load tests. SSH login auditing
-and operator-configured shell startup hooks still run as usual.
+## 文件操作与清理范围
 
-Output contains check labels, exception types and any temporary-directory cleanup
-notice, not credentials or remote command transcripts. A nonzero exit means acceptance
-is incomplete. Run in an environment which permits outbound SSH; an immediate local
-`socket: Operation not permitted` is an execution-environment restriction, not proof
-of a remote server fault.
+`--files` 排他创建随机目录 `/tmp/ssh-mcp-smoke-<32 位十六进制字符>`，权限为 `0700`。
+随后写入、读取一个小型文本/二进制测试文件，删除该文件并移除空目录。
+目录确认创建成功后，清理逻辑放在 `finally` 中，使用精确文件名和 `rmdir`，
+不用通配符或递归删除，并拒绝不符合完整命名规则的清理路径。
 
-This checks the actual SSH/SFTP implementation, **not** the MCP HTTP transport,
-HTTPS deployment, OAuth or an AI client's behavior. Those require the separate
-[client acceptance walkthrough](clients.md#acceptance-walkthrough). Record actual
-results in [verification](verification.md), keeping private target details out of Git.
+断网或进程被强制终止可能留下临时目录；脚本会在能够检测到时报告路径，人工清理前应核实。
+不会读取应用文件、查询环境变量、重启服务、修改系统配置或执行压力测试。
+SSH 登录审计以及管理员配置的 Shell 启动脚本仍会正常触发。
+
+## 结果含义
+
+输出只包含检查标签、异常类型及可能的临时目录清理提示，不包含凭据或远程命令完整输出。
+非零退出码表示验收尚未完成。运行环境必须允许 SSH 出站连接。
+本地立即出现 `socket: Operation not permitted` 代表当前执行环境限制，不能据此判断远程服务器故障。
+
+此脚本验证项目实际 SSH/SFTP 实现，不验证 MCP HTTP、HTTPS、OAuth 或 AI 客户端行为。
+这些仍需通过 [真实客户端验收](clients.md#acceptance-walkthrough) 完成。
+实际结果记入 [验证记录](verification.md)，私人目标信息不要写入公开仓库。

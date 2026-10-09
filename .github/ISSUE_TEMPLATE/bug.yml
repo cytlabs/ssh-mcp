@@ -1,23 +1,23 @@
-name: Bug report
-description: Report a reproducible problem without credentials or private command output.
+name: 问题反馈
+description: 描述可复现的问题，请勿包含凭据或私人命令输出。
 body:
   - type: textarea
     id: environment
     attributes:
-      label: Environment
-      description: SSH MCP version, Python version, target OS, client and transport.
+      label: 运行环境
+      description: SSH MCP 版本、Python 版本、目标系统、客户端及传输方式。
     validations:
       required: true
   - type: textarea
     id: steps
     attributes:
-      label: Steps to reproduce
-      description: Use a disposable target. Never include keys, tokens, passwords or private server data.
+      label: 复现步骤
+      description: 请使用临时测试目标，不要包含密钥、Token、密码或真实服务器私人数据。
     validations:
       required: true
   - type: textarea
     id: behavior
     attributes:
-      label: Expected and actual behavior
+      label: 预期行为与实际结果
     validations:
       required: true

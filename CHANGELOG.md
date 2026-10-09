@@ -1,22 +1,17 @@
-# Changelog
+# 更新记录
 
-## 0.1.0a1 — Unreleased
+## 0.1.0a1 — 开发预览，尚未发布正式版本
 
-- Add a built-in Chinese operator console with server CRUD/search, SSH probes,
-  line-oriented terminal sessions, client setup snippets and management history.
-- Persist inventory and bounded admin audit in SQLite with optimistic revision
-  checks; seed JSON once and preserve edits/deletions across restarts.
-- Separate human administrator authentication from MCP bearer authentication.
-- Add console/API/SQLite tests, DOM-to-backend workflow tests and browser QA scripts.
-
-- Create an independent MIT-licensed SSH MCP project.
-- Implement multi-server configuration with password/private-key authentication
-  and explicit known-host verification.
-- Add asynchronous shell execution, persistent PTYs, output cursors, session
-  management, timeouts and resource cleanup.
-- Add SFTP text/binary operations and chunked upload/download through MCP.
-- Add authenticated HTTP transport, local stdio and operator CLI.
-- Add metadata-only audit logging, sanitized errors, configuration validation,
-  body/output/file limits and no ambient SSH authentication.
-- Add deployment templates, client examples, unit/lifecycle/integration tests and CI.
-- Record pending dependency-backed validation and real-client deployment acceptance.
+- 建立独立的 MIT 开源项目，默认 README、部署文档和协作模板使用中文。
+- 支持多服务器、SSH 密钥/密码认证和显式主机密钥校验。
+- 支持任意 Shell 命令、持久 PTY、异步输出游标、会话管理、超时与资源回收。
+- 支持 SFTP 文本/二进制文件及 MCP 分块上传下载。
+- 提供带认证的 Streamable HTTP、本地 stdio 和管理 CLI。
+- 增加中文管理控制台：服务器增删改与搜索、SSH 连接测试、逐行终端、客户端配置和操作记录。
+- 使用 SQLite 保存服务器及管理记录，通过版本号防止并发覆盖；JSON 只在首次启动时导入。
+- 分离人工管理员 Token 和 MCP Token，日志不记录命令正文和凭据。
+- 增加配置校验、请求体/输出/文件容量限制，不隐式使用本机 SSH Agent 或默认密钥。
+- 提供独立 HTTPS 部署和复用现有代理的部署模板、客户端示例、低影响真实 SSH 联调脚本。
+- 建立 Python、真实 SSH/SFTP/MCP、DOM、浏览器及 Docker CI 检查。
+- 修复 CI 发现的测试辅助脚本 lint 问题，并更新运行器预装打包工具以通过依赖审计。
+- 真实生产部署和 AI 客户端验收尚未完成，详见验证记录。

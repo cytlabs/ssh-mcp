@@ -1,38 +1,35 @@
-# Deployment
+# 部署说明
 
-## Topology
+## 连接结构
 
 ```mermaid
 flowchart LR
-    A[AI client] -->|HTTPS + Bearer, MCP| P[Caddy or existing TLS proxy]
-    P -->|private HTTP| M[SSH MCP single worker]
-    M -->|SSH / SFTP| S1[Server A]
-    M -->|SSH / SFTP| S2[Server B]
-    C[Operator config and secrets] --> M
+    A[AI 客户端] -->|HTTPS + Bearer，MCP| P[Caddy 或现有 HTTPS 代理]
+    P -->|内部 HTTP| M[SSH MCP 单工作进程]
+    M -->|SSH / SFTP| S1[服务器 A]
+    M -->|SSH / SFTP| S2[服务器 B]
+    C[管理员配置与凭据] --> M
 ```
 
-Use one worker/replica: SSH channels and output live in process memory. There is
-no shared-session store or distributed routing in this release. Service restarts
-end active connections. The service host needs outbound access to each SSH target.
+当前只使用一个工作进程或副本：SSH 通道和输出保存在内存，没有跨实例会话存储或路由。
+重启服务会结束连接。MCP 主机必须能够访问每台目标服务器的 SSH 端口。
 
-## Host-key enrollment
+<a id="host-key-enrollment"></a>
 
-1. Obtain each host's SSH host-key fingerprint through a trusted channel (provider
-   console, an existing verified SSH connection, or the server administrator).
-2. On the operator/service machine, collect the public key, for example
-   `ssh-keyscan -p 22 staging.example.com > candidate_hosts`.
-3. Compare `ssh-keygen -lf candidate_hosts` with the trusted fingerprints.
-4. Only after they match, append the verified lines to the configured `known_hosts`.
+## 核验主机密钥
 
-`ssh-keyscan` alone does not establish trust. Non-default ports use
-`[hostname]:port` entries. The hostname/IP in the entry must match the configured
-target. SSH MCP intentionally has no `insecure_skip_verify` option.
+1. 通过可信渠道取得目标 SSH 主机公钥指纹，例如云控制台、已有已验证 SSH 连接或管理员。
+2. 在操作者或 MCP 主机收集候选公钥，例如 `ssh-keyscan -p 22 staging.example.com > candidate_hosts`。
+3. 将 `ssh-keygen -lf candidate_hosts` 的结果与可信指纹比较。
+4. 只有匹配后，才把公钥追加到配置的 `known_hosts`。
 
-## Docker Compose with HTTPS
+单独执行 `ssh-keyscan` 不足以建立信任。非默认端口使用 `[hostname]:port` 条目。
+条目中的主机名/IP 必须匹配配置目标。本产品不提供跳过验证的选项。
 
-The templates assume a dedicated hostname pointing at the deployment server, and
-ports 80/443 available for Caddy certificate issuance and HTTPS. If an existing
-proxy owns those ports, integrate with it rather than starting a second listener.
+## Docker Compose 与独立 HTTPS 入口
+
+默认模板要求一个指向部署服务器的专用主机名，以及可供 Caddy 使用的 80/443 端口。
+已有代理占用这些端口时，使用下文的现有代理方案，不启动第二个监听者。
 
 ```sh
 mkdir -p deploy/config/secrets
@@ -40,23 +37,20 @@ cp config.example.json deploy/config/config.json
 cp deploy/.env.example deploy/.env
 ```
 
-Edit `deploy/config/config.json`:
+编辑 `deploy/config/config.json`：
 
-- Set `http.listen_host` to `0.0.0.0` **inside the container**.
-- Set `http.public_url` to `https://your-actual-hostname`.
-- Replace/remove example targets. Keep credential paths under `/config`, using
-  relative `secrets/...` paths or absolute `/config/secrets/...` paths.
-- Copy the needed private keys and verified `known_hosts` into `deploy/config/secrets`.
+- 容器内的 `http.listen_host` 设置为 `0.0.0.0`。
+- `http.public_url` 设置为实际 HTTPS 地址，例如 `https://ssh-mcp.example.com`。
+- 替换或删除示例目标；凭据路径放在 `/config` 内，使用相对 `secrets/...` 或绝对 `/config/secrets/...`。
+- 把所需私钥和已经核验的 `known_hosts` 放入 `deploy/config/secrets`。
 
-Edit `deploy/.env`: set the same `SSH_MCP_DOMAIN`, independent random `SSH_MCP_TOKEN`
-and `SSH_MCP_ADMIN_TOKEN` values, and
-only the SSH password/passphrase variables referenced in your configuration.
-Generate a token with the installed `ssh-mcp generate-token`, or
-`python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`.
-Never commit `.env`, actual config, host inventories or private keys.
+编辑 `deploy/.env`，设置相同的 `SSH_MCP_DOMAIN`，分别生成随机且不同的 `SSH_MCP_TOKEN`
+和 `SSH_MCP_ADMIN_TOKEN`，只保留配置实际引用的 SSH 密码/口令环境变量。
+可以用 `ssh-mcp generate-token`，或 `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` 生成 Token。
+真实配置、`.env`、服务器清单和私钥不能提交到仓库。
 
-The application container runs as UID/GID `10001`. Arrange ownership so it can
-read its configuration and key files; on Linux, an example for this dedicated directory is:
+应用容器以 UID/GID `10001` 运行，需要能读取自己的配置和密钥。
+以下权限命令仅用于专门创建的 `deploy/config` 目录：
 
 ```sh
 sudo chown -R 10001:10001 deploy/config
@@ -68,23 +62,19 @@ docker compose -f deploy/compose.yaml --env-file deploy/.env run --rm ssh-mcp ch
 docker compose -f deploy/compose.yaml --env-file deploy/.env up -d
 ```
 
-Compose exposes only Caddy's ports to the host. The MCP service port remains on
-the internal Compose network. Do not add a public `8000:8000` mapping. Caddy must
-preserve the public Host header; SSH MCP checks Host and any supplied Origin.
+只向主机暴露 Caddy 的端口，MCP 应用留在 Compose 内部网络。
+不要增加公网 `8000:8000` 映射。代理应保留公开 Host，SSH MCP 会校验 Host 及请求携带的 Origin。
 
-The health check for authentication is an unauthenticated request to
-`https://your-actual-hostname/mcp`: it must return **401**. A successful authenticated
-MCP initialization and `list_servers` are the readiness checks; a 401 alone proves
-neither SSH connectivity nor a complete MCP exchange.
+不带认证访问公开 `/mcp` 应返回 **401**；真正的就绪检查是带认证完成 MCP 初始化和 `list_servers`。
+只有 401 并不能证明 SSH 连接或完整 MCP 调用正常。
 
-## Native service / existing reverse proxy
+## 复用已有 HTTPS 代理
 
-For Docker behind an existing **host-level** TLS proxy, use the standalone
-[existing-proxy Compose file](../deploy/compose.existing-proxy.yaml) instead of
-`compose.yaml`. It does not launch Caddy or bind ports 80/443. It publishes the
-application only on `127.0.0.1:18080`; set `SSH_MCP_LOCAL_PORT` in `deploy/.env` if
-that port is already in use. Keep the application listen address `0.0.0.0` inside
-the container and configure the real HTTPS origin in `http.public_url`.
+Docker 部署使用独立的 [现有代理 Compose 文件](../deploy/compose.existing-proxy.yaml)，
+替代 `compose.yaml`，不要把两个文件组合使用。
+它不启动 Caddy，也不绑定 80/443；只把应用映射到主机 `127.0.0.1:18080`。
+先核实端口空闲，必要时在 `deploy/.env` 设置 `SSH_MCP_LOCAL_PORT`。
+应用容器内仍监听 `0.0.0.0`，`http.public_url` 填实际 HTTPS 源地址。
 
 ```sh
 docker compose -p ssh-mcp -f deploy/compose.existing-proxy.yaml --env-file deploy/.env build
@@ -92,84 +82,63 @@ docker compose -p ssh-mcp -f deploy/compose.existing-proxy.yaml --env-file deplo
 docker compose -p ssh-mcp -f deploy/compose.existing-proxy.yaml --env-file deploy/.env up -d
 ```
 
-Use the same private config/key ownership and token setup described above. Proxy
-to `http://127.0.0.1:18080` (or the selected port), preserving the public Host and
-request paths. A containerized proxy cannot use the host's loopback address as its
-own loopback; use a deliberately shared private Docker network in that case.
-Before changing any shared proxy, inspect its current listeners/routes, save a
-backup, validate the changed configuration and reload only after validation passes.
-Verify existing applications remain healthy after the change.
+凭据权限和 Token 准备与前文相同。主机级代理转发到 `http://127.0.0.1:18080` 或选定端口，保留 Host 和路径。
+若代理也在容器内，其 `127.0.0.1` 并不是主机，需要明确配置共享私有 Docker 网络。
+修改共享代理前，检查已有监听和路由并备份，验证配置通过后才重载，随后复查原有应用健康。
 
-Without a domain, a trusted certificate covering the public IP can provide HTTPS.
-Verify certificate coverage and renewal before reusing an existing IP endpoint.
-If its routes conflict with the existing application, a separate HTTPS listener
-can provide a distinct origin, subject to port availability and client support.
-Set that exact origin, including any nonstandard port, in `http.public_url`.
-Do not disable TLS verification or assume an arbitrary URL subpath works: this
-console currently expects `/console`, `/admin/` and `/mcp` at the origin root.
+没有域名时，可以使用覆盖公网 IP 的可信证书提供 HTTPS。
+复用已有 IP 入口前先核实证书覆盖范围和续期方式。
+若根路径与现有应用冲突，可在端口允许且客户端支持的前提下设置独立 HTTPS 监听。
+`http.public_url` 必须包含实际的非标准端口。
+不要关闭 TLS 验证；当前控制台要求 `/console`、`/admin/`、`/mcp` 位于源地址根路径，不能直接假设任意子路径可用。
 
-For a native service:
+## 原生进程与 systemd
 
-Install the project in `/opt/ssh-mcp/.venv`, create a dedicated `ssh-mcp` OS user,
-and put configuration and keys under `/etc/ssh-mcp` owned by that account.
-The supplied [systemd unit](../deploy/ssh-mcp.service) loads secrets from a protected
-`/etc/ssh-mcp/ssh-mcp.env` and binds according to your config. It uses
-`ProtectHome=true`, so do not place runtime keys in an operator home directory.
+把项目安装到 `/opt/ssh-mcp/.venv`，创建专用 `ssh-mcp` 系统账户，
+配置和密钥放在该账户拥有的 `/etc/ssh-mcp`。
+[systemd 单元](../deploy/ssh-mcp.service) 从受保护的 `/etc/ssh-mcp/ssh-mcp.env` 加载秘密。
+单元启用了 `ProtectHome=true`，运行密钥不要放在操作者的家目录。
 
-Keep the default loopback listen address. Terminate TLS at the existing proxy,
-preserve Host, forward `/mcp`, `/console` (including assets) and `/admin/` to the
-same paths on `http://127.0.0.1:8000`, allow POST/GET/PUT/DELETE,
-set a 2 MiB request body limit and a response timeout of at least 45 seconds.
-Disable request-body/header logging. Long commands are polled in short requests,
-so the proxy does not need to hold a connection for the full command duration.
+原生部署保留回环监听地址，由已有代理终止 TLS。
+将 `/mcp`、`/console`（包括静态文件）和 `/admin/` 原路径转发到 `http://127.0.0.1:8000`，
+保留 Host，允许 POST/GET/PUT/DELETE，限制请求体为 2 MiB，响应超时不少于 45 秒。
+不要记录请求体或认证头。长任务采用短请求轮询，不需让代理连接保持整个命令执行时长。
 
-## Server management and rotation
+## 服务器管理与凭据轮换
 
-The first startup imports JSON targets into SQLite. After that, add, edit and
-delete targets in `/console`; changes update the current HTTP worker immediately.
-Existing SSH sessions keep their connections, and running sessions must be closed
-before removing a target. JSON remains the source of runtime settings, which need
-a restart. JSON edits do not overwrite the initialized database inventory.
+首次启动从 JSON 导入服务器到 SQLite，此后通过 `/console` 增删改，当前 HTTP 工作进程立即更新。
+运行中的会话继续使用原连接；删除目标前必须关闭其运行会话。
+JSON 仍负责运行设置，修改后重启；编辑 JSON 不会覆盖已初始化的数据库清单。
 
-Docker persists SQLite in the `ssh_mcp_data` volume at `/data/ssh-mcp.sqlite3`;
-systemd uses `/var/lib/ssh-mcp/inventory.sqlite3`. Pass the same `--database` path
-to CLI checks when using a custom location. Back up the database with the service
-stopped, alongside private configuration and secrets. See [console storage rules](console.md).
+Docker 数据库位于 `ssh_mcp_data` 卷的 `/data/ssh-mcp.sqlite3`，
+systemd 位于 `/var/lib/ssh-mcp/inventory.sqlite3`。
+使用自定义数据库时，CLI 检查也应传入相同的 `--database`。
+停止服务后备份数据库，配置与秘密另行安全备份，详见 [控制台存储规则](console.md)。
 
-`check` validates configuration, referenced file existence and secret availability;
-it does **not** connect to targets or prove a private key is accepted. Verify a new
-target using `execute_command` with an innocuous command such as `id`.
+`check` 只检查配置、文件存在性及环境变量，不会连接目标，也不证明私钥能登录。
+可通过 `execute_command` 执行 `id` 等简单命令核验目标。
 
-Rotate the MCP token in the service environment and client secret store, then
-restart the service. Rotate the independent admin token similarly and sign in
-again in the browser. Rotate SSH credentials on the remote account and in the
-service's key file/environment, then restart. Existing credentials never appear
-in `list_servers` or validation output.
+轮换 MCP Token 时，同时更新服务环境和客户端秘密存储，再重启服务。
+管理员 Token 以相同方式轮换，浏览器重新登录。
+SSH 凭据在目标账户及服务端密钥文件/环境变量中同时更新后重启。
+登录凭据不会出现在 `list_servers` 或配置校验输出中。
 
-## Managing the deployment host itself
+## 管理部署主机自身
 
-Configure that host as an ordinary SSH target. In a native deployment, use
-`127.0.0.1` and the local SSH server. In Compose, `127.0.0.1` means the application
-container; use a host address reachable from the container instead.
+将部署主机作为普通 SSH 目标配置。原生部署可使用 `127.0.0.1` 及本机 SSH 服务。
+容器中的 `127.0.0.1` 指容器自身，必须使用容器实际可达的主机地址。
 
-The target account must not be able to read the MCP service's secret files or
-environment. A target root account on the same machine can access those secrets;
-separate hosts or OS permission boundaries are required if that access is unwanted.
+目标账户应无法读取 MCP 服务秘密文件或环境。同机 root 账户可以读取这些信息；
+若不接受该访问能力，需要分开部署主机或设置合适的系统权限边界。
 
-## Operations
+## 运维与回滚
 
-Audit events go to stderr and contain a UTC timestamp, tool name, duration and outcome type.
-Commands, terminal input/output, file contents,
-paths and credentials are not recorded. Use journald/container logging for
-retention. These logs are operational metadata, not a complete command audit.
+审计写到标准错误，只包含 UTC 时间、工具名、耗时和结果类型，不记录命令、输入输出、文件正文、路径或凭据。
+日志由 journald 或容器运行时保留；这是操作元数据，不是完整命令审计。
 
-Memory is bounded by configured sessions and per-stream buffers; Unicode can use
-up to four bytes per retained character, before Python overhead. Lower limits for
-small hosts. A completed process retains output for `retention_seconds` from
-completion; polling does not extend that retention. Idle shells expire even if a
-remote command is running inside them, unless the client keeps accessing them.
+内存由会话数量及每个输出流的容量共同限制。Unicode 每字符可能占四字节，另有 Python 开销。
+小型主机应调低限制。完成后的输出按 `retention_seconds` 回收，轮询不会延长保留时间。
+长时间无人访问的 Shell 会过期，即使其中仍有远程命令运行。
 
-For upgrade: drain/close sessions, back up private configuration separately from
-the repository, install the new release, validate configuration, restart, then
-run MCP initialization and a disposable-target smoke test. For rollback, restore
-the previous application version and its compatible configuration.
+升级前关闭或排空会话，安全备份配置和数据库，安装新版本，检查配置后重启，
+再进行 MCP 初始化和临时目标检查。回滚时恢复旧程序及匹配的配置/数据库版本。

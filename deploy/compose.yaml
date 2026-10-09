@@ -14,7 +14,7 @@ services:
     security_opt: [no-new-privileges:true]
     pids_limit: 128
     mem_limit: 512m
-    # Internal network only; Caddy is the public HTTPS entry point.
+    # 应用只在内部网络可达，由 Caddy 提供公开 HTTPS 入口。
     expose: ["8000"]
 
   caddy:
