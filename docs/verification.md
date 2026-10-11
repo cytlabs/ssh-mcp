@@ -138,3 +138,9 @@ Bearer 客户端验收通过也不能关闭 OAuth 待办。
 协议和浏览器自动化不替代 Codex/ChatGPT 的真实 AI 对话验收。生产首次密码设置应由管理员完成。
 
 新增 `npm run test:oauth-browser` 已在本机通过，尚未接入 GitHub Actions 的 console 作业：当前 GitHub OAuth 凭据没有修改 workflow 的权限。现有 CI 继续运行后端（包含新 OAuth 测试）、原控制台、容器与构建审计。
+
+生产 OAuth 已上线（应用提交 `6cb2353`，PR [#10](https://github.com/cytlabs/ssh-mcp/pull/10)）：
+升级前确认无活动会话，备份原数据库、配置、Nginx、wheel 和源码。公开可信 HTTPS 的初始化页、
+发现端点、公共元数据 CORS 与管理来源校验通过；旧管理员 Token 已不再用于管理登录。
+原 MCP Token 兼容调用再次返回 stdout/stderr、退出码 7 和 completed；会话关闭，既有网站保持正常。
+管理员尚未设置生产密码，真实 OAuth 客户端授权仍待完成。浏览器 CI 接入见 [#11](https://github.com/cytlabs/ssh-mcp/issues/11)。

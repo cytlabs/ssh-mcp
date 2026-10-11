@@ -30,6 +30,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 | MCP-005 | 已实现并通过自动浏览器检查 | 中文控制台、SQLite、管理 API、DOM 流程及桌面/手机浏览器脚本已验证；线上浏览器已通过真实 SSH 终端、登录/刷新/退出及桌面/手机布局检查。 |
 | [MCP-006 / #3](https://github.com/cytlabs/ssh-mcp/issues/3) | 已实现并通过 CI | Python/npm 依赖锁定、固定应用基础镜像摘要、wheel 资源校验及构建记录上传；三版本测试、浏览器、容器和审计通过。见 [构建说明](docs/reproducible-builds.md)。 |
 | [MCP-007 / #6](https://github.com/cytlabs/ssh-mcp/issues/6) | 已实现并通过 CI | [PR #7](https://github.com/cytlabs/ssh-mcp/pull/7) 增加后端就绪握手、分阶段时限和脱敏诊断，前置失败后跳过依赖步骤；慢启动及异常回归合计 24 项、浏览器、三版本 Python 和容器检查通过。见验证记录。 |
+| [MCP-009 / #11](https://github.com/cytlabs/ssh-mcp/issues/11) | 待接入 CI | OAuth HTTPS 浏览器验收已在本机通过；现有 GitHub 凭据没有 workflow 写权限，维护者需将新脚本加入 console 作业。 |
 | [MCP-008 / #8](https://github.com/cytlabs/ssh-mcp/issues/8) | 待修复 | Python 3.10 完整集成测试通过，但退出时出现子进程 transport 事件循环关闭警告；需定位并等待资源清理，不能隐藏 stderr。 |
 
 ## 本轮收尾清单
@@ -42,7 +43,9 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 - [x] 独立生产部署、可信 IP HTTPS、公开 MCP 协议与线上控制台联调（#1）。
 - [ ] 真实 AI 客户端对话验收（#1），不以 SDK 或浏览器控制台代替。
 - [x] OAuth 核心、中文密码登录和授权管理（#2）。
-- [ ] OAuth 真实 Codex/ChatGPT 对话验收（#1、#2）。
+- [x] OAuth 线上升级、公开发现端点及原命令执行链路复测（#10）。
+- [ ] 管理员首次密码设置与 OAuth 真实 Codex/ChatGPT 对话验收（#1、#2）。
+- [ ] OAuth HTTPS 浏览器测试接入 CI（#11）。
 - [x] 依赖锁定与可复现构建（#3，PR #5）。
 - [ ] 私密漏洞报告渠道和首次正式发布（#4）。
 - [x] DOM 测试稳定性修复的 CI 验收（#6，PR #7）。
