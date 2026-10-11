@@ -34,6 +34,7 @@ const titles = {
 };
 let setupToken = new URLSearchParams(location.hash.slice(1)).get("setup") || "";
 if (setupToken) history.replaceState(null, "", location.pathname + location.search);
+let setupReady = false, bootGeneration = 0;
 let authMode = "token", csrf = "", initialized = true, grants = [];
 let authorizationRequest = new URLSearchParams(location.search).get("authorize");
 let token = "",
@@ -473,7 +474,7 @@ $("#login-form").addEventListener("submit", async (event) => {
     if (authMode === "oauth") {
       const password = $("#admin-token").value;
       if (!initialized && password !== $("#confirm-password").value) throw new Error("两次输入的密码不一致。");
-      const result = await authRequest(initialized ? "/login" : "/setup", "POST", { password, username: $("#username").value.trim(), setup_token: setupToken });
+      const result = await authRequest(initialized ? "/login" : "/setup", "POST", { password, username: $("#username").value.trim() });
       csrf = result.csrf; initialized = true;
       configureLogin();
       setupToken = ""; $("#confirm-password").value = "";
@@ -663,8 +664,13 @@ async function authRequest(path, method = "GET", body) {
 }
 function configureLogin() {
   const oauth = authMode === "oauth", setup = oauth && !initialized;
-  $("#login-title").textContent = setup ? "创建管理员账号" : "连接你的工作空间";
-  $("#login-description").textContent = oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录，管理服务器与客户端授权。") : "使用服务端设置的管理员 Token 登录。";
+  const locked = setup && !setupReady;
+  $("#login-fields").hidden = locked;
+  const submit = $("#login-form button[type=submit]");
+  submit.hidden = locked;
+  submit.textContent = setup ? "创建账号并进入控制台" : "进入控制台";
+  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "连接你的工作空间";
+  $("#login-description").textContent = locked ? "当前还没有管理员账号。请打开部署时生成的完整初始化链接，再创建用户名和密码。" : oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录，管理服务器与客户端授权。") : "使用服务端设置的管理员 Token 登录。";
   $("#password-label").textContent = oauth ? (setup ? "设置密码" : "密码") : "管理员 Token";
   const input = $("#admin-token");
   input.minLength = oauth ? (setup ? 12 : 1) : 32;
@@ -675,9 +681,9 @@ function configureLogin() {
   $("#confirm-password").required = setup;
   $("#username-label").hidden = !oauth;
   $("#username").required = oauth;
-  $("#login-form button[type=submit]").disabled = setup && !setupToken;
+  $("#login-form button[type=submit]").disabled = locked;
   $("#remember").closest("label").hidden = oauth;
-  $(".login-help").textContent = oauth ? (setup ? (setupToken ? "初始化链接将在创建账号后失效。连接凭据由系统自动生成，无需填写。" : "请使用部署管理员提供的初始化链接创建账号。") : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
+  $(".login-help").textContent = oauth ? (setup ? (setupReady ? "初始化链接将在创建账号后失效。连接凭据由系统自动生成，无需填写。" : "请使用部署管理员提供的初始化链接创建账号。") : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
 }
 async function showConsent() {
   const info = await authRequest(`/consent?request=${encodeURIComponent(authorizationRequest)}`);
@@ -712,9 +718,17 @@ async function loadGrants() {
   })));
 }
 async function boot() {
+  const generation = ++bootGeneration, initialToken = setupToken;
+  setupToken = "";
+  if (initialToken) {
+    try { await authRequest("/setup-session", "POST", { setup_token: initialToken }); }
+    catch (error) { $("#login-error").textContent = error.message; }
+  }
   const status = await authRequest("/session");
+  if (generation !== bootGeneration) return;
   authMode = status.mode;
   initialized = status.initialized !== false;
+  setupReady = status.setup_ready === true;
   configureLogin();
   if (authMode === "oauth") {
     try { sessionStorage.removeItem(storageKey); } catch { /* Cookie 登录不依赖 Web Storage */ }
@@ -725,4 +739,14 @@ async function boot() {
     if (saved) await login(saved, true);
   }
 }
-boot().catch((error) => { $("#login-error").textContent = error.message; });
+function startLogin() {
+  boot().catch((error) => { $("#login-error").textContent = error.message; });
+}
+window.addEventListener("hashchange", () => {
+  const value = new URLSearchParams(location.hash.slice(1)).get("setup");
+  if (!value) return;
+  setupToken = value;
+  history.replaceState(null, "", location.pathname + location.search);
+  startLogin();
+});
+startLogin();

@@ -18,6 +18,7 @@ from .auth import BearerAuth
 from .identity import COOKIE_SECONDS, SCOPE, AuthError, digest, password_hash, password_matches
 
 COOKIE = "__Host-ssh-mcp-session"
+SETUP_COOKIE = "__Host-ssh-mcp-setup"
 PUBLIC = {"/oauth/token", "/oauth/register", "/oauth/revoke",
           "/.well-known/oauth-authorization-server",
           "/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"}
@@ -40,14 +41,14 @@ class OAuth:
         self.hashers = asyncio.Semaphore(2)
         console.admin_app = BearerAuth(console.api, max_body=65536, authorize=self.browser_authorized)
 
-    def cookie(self, scope):
+    def cookie(self, scope, name=COOKIE):
         values = [v for k, v in scope.get("headers", []) if k.lower() == b"cookie"]
         if len(values) != 1:
             return ""
         try:
             jar = SimpleCookie()
             jar.load(values[0].decode("latin1"))
-            return jar[COOKIE].value if COOKIE in jar else ""
+            return jar[name].value if name in jar else ""
         except CookieError:
             return ""
 
@@ -164,7 +165,21 @@ class OAuth:
             authenticated = self.store.session_valid(raw)
             return JSONResponse({"mode": "oauth", "initialized": bool(self.store.owner_password()),
                                  "authenticated": authenticated,
+                                 "setup_ready": bool(self.store.setup_remaining(self.cookie(scope, SETUP_COOKIE))),
                                  "csrf": digest(raw + ":csrf") if authenticated else None})
+        if path == "/auth/setup-session" and method == "POST":
+            if not self.same_origin(scope):
+                raise AuthError("untrusted_origin", 403)
+            self.rate("setup-session", 20)
+            data = await self.body(request)
+            raw = data.get("setup_token", "")
+            remaining = self.store.setup_remaining(raw) if isinstance(raw, str) else 0
+            if not remaining:
+                raise AuthError("setup_link_invalid", 401)
+            response = JSONResponse({"setup_ready": True})
+            response.set_cookie(SETUP_COOKIE, raw, max_age=remaining, httponly=True,
+                                secure=True, samesite="lax", path="/")
+            return response
         if path in ("/auth/setup", "/auth/login") and method == "POST":
             if not self.same_origin(scope):
                 raise AuthError("untrusted_origin", 403)
@@ -179,7 +194,7 @@ class OAuth:
                         raise AuthError("already_initialized", 409)
                     encoded = await asyncio.to_thread(password_hash, password)
                     self.store.set_password(encoded, initial=True, username=data.get("username", ""),
-                                            setup_token=data.get("setup_token", ""))
+                                            setup_token=self.cookie(scope, SETUP_COOKIE))
                 else:
                     encoded = self.store.owner_password()
                     if not encoded or not await asyncio.to_thread(password_matches, password, encoded):
@@ -187,7 +202,9 @@ class OAuth:
                     if (self.store.owner_password() != encoded
                             or data.get("username") != self.store.owner_username()):
                         raise AuthError("invalid_credentials", 401)
-            return self.session_response(self.store.browser_session())
+            response = self.session_response(self.store.browser_session())
+            response.delete_cookie(SETUP_COOKIE, secure=True, httponly=True, samesite="lax")
+            return response
         if path.startswith("/auth/"):
             if not self.browser_authorized(scope):
                 raise AuthError("login_required", 401)

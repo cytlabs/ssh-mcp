@@ -55,6 +55,8 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         return await self.client.post(path, json=data, headers={"Origin": ORIGIN, "X-CSRF-Token": self.csrf, **extra})
 
     async def login(self):
+        bootstrap = await self.browser("/auth/setup-session", {"setup_token": self.setup_token})
+        self.assertEqual(bootstrap.status_code, 200)
         response = await self.browser("/auth/setup", {"username": "admin", "password": PASSWORD, "setup_token": self.setup_token})
         self.assertEqual(response.status_code, 200, response.text)
         self.csrf = response.json()["csrf"]
@@ -235,6 +237,17 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         for secret in (PASSWORD, pair["access_token"], pair["refresh_token"], code, self.client.cookies.get(COOKIE)):
             self.assertNotIn(secret.encode(), raw)
         self.assertEqual(self.path.stat().st_mode & 0o777, 0o600)
+
+    async def test_setup_cookie_survives_reload_and_is_invalidated(self):
+        self.assertFalse((await self.client.get("/auth/session")).json()["setup_ready"])
+        response = await self.browser("/auth/setup-session", {"setup_token": self.setup_token})
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("HttpOnly", response.headers["set-cookie"])
+        self.assertTrue((await self.client.get("/auth/session")).json()["setup_ready"])
+        response = await self.browser("/auth/setup", {"username": "admin", "password": PASSWORD})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse((await self.client.get("/auth/session")).json()["setup_ready"])
+        self.assertEqual((await self.browser("/auth/setup-session", {"setup_token": self.setup_token})).status_code, 401)
 
     async def test_rate_limit_does_not_leak_credentials(self):
         for _ in range(10):

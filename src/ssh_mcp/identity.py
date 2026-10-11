@@ -175,6 +175,13 @@ class IdentityStore:
                 os.replace(temporary, self.setup_path)
             return link
 
+    def setup_remaining(self, raw):
+        with self.lock:
+            if not raw or self.owner_password():
+                return 0
+            row = self.db.execute("SELECT expires FROM setup WHERE hash=?", (digest(raw),)).fetchone()
+            return max(0, int(row[0] - time.time())) if row else 0
+
     def set_password(self, encoded: str, *, username="admin", initial=False, setup_token=""):
         if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9_.@+-]{1,128}", username):
             raise AuthError("invalid_username")
