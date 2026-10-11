@@ -54,6 +54,8 @@ class Console:
         if scope["type"] != "http":
             return await self.mcp_app(scope, receive, send)
         path = scope["path"]
+        if path == "/auth/session" and scope["method"] == "GET":
+            return await self.respond(send, 200, {"mode": "token"})
         if path not in ("/", "/console", "/console/") and not path.startswith(("/console/", "/admin/")):
             return await self.mcp_app(scope, receive, send)
         if not self.trusted(scope):
@@ -100,6 +102,7 @@ class Console:
         if method == "GET" and path == "/admin/state":
             return {**self.registry.snapshot(), "version": __version__,
                     "mcp_url": self.manager.config.public_url.rstrip("/") + "/mcp",
+                    "auth_mode": self.manager.config.auth_mode,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
         if method == "POST" and path == "/admin/servers":
             data = body["server"]

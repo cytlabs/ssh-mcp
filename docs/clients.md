@@ -1,11 +1,39 @@
 # MCP 客户端接入
 
 以下示例使用 `https://ssh-mcp.example.com/mcp`，请替换为实际部署入口。
-MCP Token 保存到客户端的环境变量或秘密配置中，不放进对话。
-客户端不需要 SSH 密码或私钥，但 MCP Token 本身拥有操作所有已配置目标的权限，应妥善保管。
+推荐 `http.auth_mode: "oauth"`：管理员先在 HTTPS 控制台设置密码，AI 客户端添加 MCP URL，
+打开浏览器登录并确认授权。客户端自动保存访问及刷新凭据；无需复制服务器 Token。
+OAuth 授权最长 30 天，可在控制台「MCP 接入」撤销。权限覆盖所有已配置目标。
 
-这些是根据供应商文档核对的配置示例，不代表已经完成各客户端的最终用户验收。
-可用性也受客户端版本和组织策略影响，实际完成范围见 [验证记录](verification.md)。
+这些配置示例不代表已经完成各客户端的最终用户验收。可用性也受客户端版本和组织策略影响，
+实际完成范围见 [验证记录](verification.md)。
+
+## Codex：浏览器授权（推荐）
+
+```sh
+codex mcp add ssh_mcp --url https://ssh-mcp.example.com/mcp
+codex mcp login ssh_mcp
+```
+
+如果同名条目已配置固定请求头或 `bearer_token_env_var`，先移除该认证设置，再运行登录命令。
+无本机浏览器时，可使用 `codex mcp login ssh_mcp --no-browser`，按 CLI 提示完成授权回调。
+完成后重新加载 MCP 工具，让 AI「查看可用服务器」。参考 [Codex MCP 文档](https://learn.chatgpt.com/docs/extend/mcp)。
+
+## ChatGPT、Cursor、Claude 的 OAuth 接入
+
+在支持远程 MCP 和 OAuth 的客户端设置中添加公开 HTTPS `/mcp` URL，选择 OAuth，
+跟随发现端点完成注册、登录和授权。回调地址由客户端提供，无需把 SSH 私钥或管理员密码交给 AI。
+如果客户端要求手动 client_id/secret，而不能使用动态注册，该流程尚需专门验证，不要填入静态 MCP Token 冒充 OAuth 客户端密钥。
+
+服务支持动态注册和公共/机密客户端，不实现客户端 ID 元数据文档（CIMD）。
+Codex 可在需要时使用 `--oauth-client-registration DCR`；不宣称所有客户端都支持相同发现方式。
+参考 [MCP 授权规范](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization)、
+[OpenAI 自定义 MCP 服务说明](https://developers.openai.com/api/docs/guides/custom-mcp-server)。
+
+## 静态 Token 兼容模式
+
+以下示例仅用于固定 Token 自动化或旧客户端。设置服务端 `SSH_MCP_TOKEN` 才会开启该兼容入口；
+在 OAuth 模式下该环境变量可留空。凭据不能放进对话，管理员 Token 不能用于 MCP。
 
 ## Codex：远程 HTTP
 
@@ -79,19 +107,6 @@ tool_timeout_sec = 90
 
 此模式的服务进程在本机运行，凭据由其环境和本地文件提供。
 标准输出专用于 MCP 协议，日志写标准错误。没有本地进程环境的 AI 客户端应使用远程 HTTP。
-
-## ChatGPT：OAuth 接入尚待实现
-
-已核对的 ChatGPT 自定义 MCP 配置提供 OAuth 相关或无认证模式；
-OAuth 客户端凭据与服务自己的 Bearer API Token 并不是同一种凭据。
-SSH MCP `0.1.0a1` 尚未实现 OAuth 授权服务器或交互式授权同意流程。
-不要为了接入而选择无认证模式。
-参考：[OpenAI 自定义 MCP 服务说明](https://developers.openai.com/api/docs/guides/custom-mcp-server)。
-
-后续网关需提供 OAuth 发现、授权码与 PKCE、重定向 URI 校验、授权同意、
-面向指定服务的访问 Token 及撤销能力。内部 Bearer Token 应只保留在网关服务端，
-同时禁止客户端绕过网关访问后端。目前仓库没有提供或宣称测试过这样的网关。
-该项在 [路线图](../ROADMAP.md) 中以 `MCP-002` 跟踪。
 
 <a id="acceptance-walkthrough"></a>
 

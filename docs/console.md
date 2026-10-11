@@ -5,24 +5,42 @@
 
 ## 启动
 
-安装 Python 依赖后，在服务端分别设置两个不同的随机 Token：
+示例配置启用 `http.auth_mode: "oauth"`，使用用户名和密码登录：
 
 ```sh
-export SSH_MCP_TOKEN="$(ssh-mcp generate-token)"
-export SSH_MCP_ADMIN_TOKEN="$(ssh-mcp generate-token)"
 ssh-mcp serve --config config.json --database data/ssh-mcp.sqlite3
 ```
 
-本机访问 `http://127.0.0.1:8000/console`；远程访问必须通过已部署的 HTTPS 入口。
-在页面中输入 `SSH_MCP_ADMIN_TOKEN`。这个值只供人工管理使用，不要交给 AI。
-AI 客户端仍使用 `SSH_MCP_TOKEN` 连接 `/mcp`。两个 Token 相同会导致启动失败。
+首次启动自动生成一次性初始化链接，保存在数据库旁的 `ssh-mcp.auth.setup-link`，权限为 `0600`。
+部署管理员把链接交给使用者，打开后只需创建用户名与密码（12–256 个字符），无需输入 Token。
+链接一小时内有效，创建账号后立即失效且服务端链接文件会删除。链接秘密放在 URL 片段中，
+不会作为网页请求地址或 Referer 发往服务器；页面读取后会立即清除地址栏片段。
+页面通过同源请求将初始化权限兑换为 Secure/HttpOnly Cookie，有效期不超过原链接。
+刷新或重新打开同一浏览器的控制台可继续创建账号；成功后 Cookie 和服务端初始化凭据一起失效。
+未打开初始化链接的浏览器会显示明确提示，不提供无法提交的注册表单。
 
-不设置管理员 Token 时，MCP 原有接口仍可使用，管理接口返回配置提示。
-页面外壳可以在未登录时加载，但服务器数据和操作均要求管理员认证。
+以后使用用户名和密码登录，浏览器通过 Secure、HttpOnly、SameSite=Lax Cookie 保持 8 小时会话。
+MCP 客户端令牌由服务自动生成和刷新；没有邮箱验证、找回邮件或第三方登录依赖。
 
-默认登录只保留在页面内存中。勾选「在此标签页内保持登录」后，Token 存在
-`sessionStorage`，刷新时会重新验证。退出会清除 Token、服务器信息和终端输出。
-这不是 HttpOnly Cookie 登录或多用户账户系统。
+初始化链接丢失或过期时，以服务账户运行以下命令生成新链接（旧链接同时失效）：
+
+```sh
+ssh-mcp setup-link --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
+```
+
+忘记密码时，在服务端以服务账户运行（路径与服务一致）：
+
+```sh
+ssh-mcp set-admin-password --username admin --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
+```
+
+命令交互读取密码，不把密码放到参数或日志；重设会撤销全部浏览器登录及 OAuth 授权。
+静态 MCP Token 独立管理，不随密码重设撤销。共享实例为单操作者，不提供多用户隔离。
+
+旧配置省略 `auth_mode` 时保持 `token` 行为：独立管理员 Token 登录，可选标签页 sessionStorage。
+OAuth 模式不再使用管理员 Token，包括首次初始化；现有 MCP Token 可保留兼容。
+旧版已有密码的账户升级后用户名为 `admin`，密码保留。
+OAuth 管理界面必须通过 HTTPS 使用，HTTP 无法携带 Secure Cookie。
 
 ## 页面能力
 
@@ -30,7 +48,7 @@ AI 客户端仍使用 `SSH_MCP_TOKEN` 连接 `/mcp`。两个 Token 相同会导�
 | --- | --- |
 | 服务器 | 查看、搜索、认证类型筛选、添加、编辑、移除、测试 SSH 登录 |
 | 终端会话 | 创建非 PTY Shell、查看现有 MCP 会话输出、逐行发送命令、关闭会话 |
-| MCP 接入 | 复制 Codex、Cursor、Claude Code 的地址与配置；明确 ChatGPT OAuth 的待支持状态 |
+| MCP 接入 | 复制 MCP URL 和浏览器登录说明；查看并撤销客户端授权 |
 | 操作记录 | 查看最近 50 条管理操作，SQLite 最多保留 1,000 条 |
 
 连接状态默认显示「未检测」。只有真实测试返回成功后才显示「可连接」，不把已配置
@@ -49,6 +67,7 @@ AI 客户端仍使用 `SSH_MCP_TOKEN` 连接 `/mcp`。两个 Token 相同会导�
 
 - 使用 Python 标准库 SQLite，不需要 MySQL 或单独数据库服务。
 - 默认位置是配置文件同目录下的 `data/ssh-mcp.sqlite3`，可用 `--database` 指定。
+- OAuth 身份数据在同目录的 `ssh-mcp.auth.sqlite3`（自定义路径使用 `<数据库名>.auth.sqlite3`）。保存密码及会话/令牌哈希、客户端元数据和授权记录，备份需包含两个数据库。
 - 第一次启动数据库时，从 JSON 的 `servers` 导入。之后数据库成为服务器列表的来源。
   修改 JSON 不会覆盖网页保存的服务器，也不会把已删除的条目重新导入。
 - HTTP 监听地址、公开 URL、资源限制等运行设置仍在 JSON 中，修改后重启生效。
@@ -80,6 +99,7 @@ npm install
 npm run test:ui
 npx playwright install --with-deps chromium
 npm run test:browser
+PYTHON=.venv/bin/python npm run test:oauth-browser
 ```
 
 前端开发测试已核对 Node.js 24.18.0；测试依赖版本与 Node 范围见 `package.json`。

@@ -341,6 +341,73 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             await asyncio.wait_for(task, 10)
             sock.close()
 
+    async def test_oauth_token_executes_commands_over_mcp(self):
+        import hashlib
+        from urllib.parse import parse_qs, urlsplit
+        from ssh_mcp.identity import digest, password_hash
+        from ssh_mcp.oauth import COOKIE
+
+        sock = socket.socket()
+        sock.bind(("127.0.0.1", 0))
+        sock.listen()
+        port = sock.getsockname()[1]
+        origin = f"https://127.0.0.1:{port}"
+        url = f"http://127.0.0.1:{port}"
+        app = create_http_app(replace(self.config, auth_mode="oauth", public_url=origin), self.root / "oauth-inventory.sqlite3")
+        app.store.set_password(password_hash("integration-fixture-only"))
+        browser = app.store.browser_session()
+        headers = {"Cookie": f"{COOKIE}={browser}", "Origin": origin, "X-CSRF-Token": digest(browser + ":csrf")}
+        server = uvicorn.Server(uvicorn.Config(app, log_level="error", lifespan="on"))
+        task = asyncio.create_task(server.serve(sockets=[sock]))
+        try:
+            async def ready():
+                while not server.started:
+                    if task.done():
+                        await task
+                    await asyncio.sleep(0.02)
+            await asyncio.wait_for(ready(), 10)
+            async with httpx.AsyncClient(trust_env=False) as http:
+                registration = await http.post(url + "/oauth/register", json={"redirect_uris": ["http://127.0.0.1/callback"]})
+                cid = registration.json()["client_id"]
+                verifier = "v" * 64
+                challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+                authorize = await http.get(url + "/oauth/authorize", params={"client_id": cid,
+                    "redirect_uri": "http://127.0.0.1/callback", "response_type": "code",
+                    "resource": origin + "/mcp", "code_challenge": challenge, "code_challenge_method": "S256"})
+                handle = parse_qs(urlsplit(authorize.headers["location"]).query)["authorize"][0]
+                self.assertEqual((await http.get(url + "/auth/consent", headers=headers, params={"request": handle})).status_code, 200)
+                consent = await http.post(url + "/auth/consent", headers=headers, json={"request": handle, "approve": True})
+                code = parse_qs(urlsplit(consent.json()["redirect"]).query)["code"][0]
+                response = await http.post(url + "/oauth/token", data={"grant_type": "authorization_code", "client_id": cid,
+                    "code": code, "code_verifier": verifier, "redirect_uri": "http://127.0.0.1/callback", "resource": origin + "/mcp"})
+                self.assertEqual(response.status_code, 200)
+                token = response.json()["access_token"]
+                def factory(headers=None, timeout=None, auth=None):
+                    return httpx.AsyncClient(headers=headers, timeout=timeout, auth=auth, trust_env=False)
+                async with streamablehttp_client(url + "/mcp", headers={"Authorization": "Bearer " + token}, httpx_client_factory=factory) as streams:
+                    async with ClientSession(streams[0], streams[1]) as client:
+                        await client.initialize()
+                        result = await client.call_tool("execute_command", {"server_id": "key",
+                            "command": "printf oauth-output; printf oauth-error >&2; exit 7", "wait_seconds": 2})
+                        self.assertFalse(result.isError)
+                        body = json.loads(result.content[0].text)
+                        for _ in range(10):
+                            if body["status"] != "running":
+                                break
+                            result = await client.call_tool("read_output", {"session_id": body["session_id"], "wait_seconds": 1})
+                            body = json.loads(result.content[0].text)
+                        self.assertEqual(body["stdout"]["text"], "oauth-output")
+                        self.assertEqual(body["stderr"]["text"], "oauth-error")
+                        self.assertEqual(body["exit_code"], 7)
+                        await client.call_tool("close_session", {"session_id": body["session_id"]})
+                grant = app.store.grants()[0]["id"]
+                self.assertEqual((await http.post(url + "/auth/revoke", headers=headers, json={"grant_id": grant})).status_code, 200)
+                self.assertEqual((await http.get(url + "/mcp", headers={"Authorization": "Bearer " + token})).status_code, 401)
+        finally:
+            server.should_exit = True
+            await asyncio.wait_for(task, 10)
+            sock.close()
+
     async def test_stdio_mcp_discovery(self):
         import sys
         config_path = self.root / "stdio.json"

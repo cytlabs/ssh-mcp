@@ -32,6 +32,11 @@ const titles = {
     "查看最近的管理操作。记录不包含命令正文和凭据。",
   ],
 };
+let setupToken = new URLSearchParams(location.hash.slice(1)).get("setup") || "";
+if (setupToken) history.replaceState(null, "", location.pathname + location.search);
+let setupReady = false, bootGeneration = 0;
+let authMode = "token", csrf = "", initialized = true, grants = [];
+let authorizationRequest = new URLSearchParams(location.search).get("authorize");
 let token = "",
   epoch = 0,
   view = "servers",
@@ -51,6 +56,7 @@ const probes = new Map(),
   requests = new Set();
 
 class StaleRequest extends Error {}
+class AuthenticationError extends Error {}
 function notify(message, error = false) {
   clearTimeout(toastTimer);
   const toast = $("#toast");
@@ -70,7 +76,7 @@ async function api(path, method = "GET", body) {
     const response = await fetch(`/admin${path}`, {
       method,
       headers: {
-        Authorization: `Bearer ${token}`,
+        ...(authMode === "oauth" ? { "X-CSRF-Token": csrf } : { Authorization: `Bearer ${token}` }),
         ...(body === undefined ? {} : { "Content-Type": "application/json" }),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -87,7 +93,7 @@ async function api(path, method = "GET", body) {
     if (currentEpoch !== epoch) throw new StaleRequest();
     if (response.status === 401) {
       logout();
-      throw new Error("管理员 Token 无效或已失效，请重新登录。");
+      throw new AuthenticationError(authMode === "oauth" ? "登录状态已失效，请重新登录。" : "管理员 Token 无效或已失效，请重新登录。");
     }
     if (!response.ok)
       throw new Error(
@@ -95,7 +101,7 @@ async function api(path, method = "GET", body) {
       );
     return result;
   } catch (error) {
-    if (currentEpoch !== epoch && !(error.message || "").includes("Token"))
+    if (currentEpoch !== epoch && !(error instanceof AuthenticationError))
       throw new StaleRequest();
     if (error.name === "AbortError")
       throw new Error("请求超时。请检查服务状态，刷新后再决定是否重试。");
@@ -125,6 +131,9 @@ function stopPolling() {
 function logout() {
   epoch++;
   token = "";
+  csrf = "";
+  grants = [];
+  $("#consent-view").hidden = true;
   stopPolling();
   requests.forEach((r) => r.abort());
   try {
@@ -162,7 +171,7 @@ async function login(value, remember = false) {
   await refresh(false);
   $("#login-error").textContent = "";
   $("#admin-token").value = "";
-  if (remember) {
+  if (remember && authMode === "token") {
     try {
       sessionStorage.setItem(storageKey, token);
     } catch {
@@ -174,6 +183,7 @@ async function login(value, remember = false) {
   $("#logout").hidden = false;
   $("#connection-label").textContent = "管理员已连接";
   render();
+  if (authMode === "oauth" && authorizationRequest) await showConsent();
 }
 function badge(status, text) {
   return `<span class="badge ${escapeHTML(status)}">${escapeHTML(text)}</span>`;
@@ -331,6 +341,7 @@ function confirmAction(title, text) {
   );
 }
 function renderClients() {
+  if (authMode === "oauth") return renderOAuthClients();
   const clients = [
     ["Codex", "环境变量认证", "C"],
     ["Cursor", "远程 HTTP", "↗"],
@@ -460,7 +471,15 @@ $("#login-form").addEventListener("submit", async (event) => {
   button.disabled = true;
   $("#login-error").textContent = "";
   try {
-    await login($("#admin-token").value.trim(), $("#remember").checked);
+    if (authMode === "oauth") {
+      const password = $("#admin-token").value;
+      if (!initialized && password !== $("#confirm-password").value) throw new Error("两次输入的密码不一致。");
+      const result = await authRequest(initialized ? "/login" : "/setup", "POST", { password, username: $("#username").value.trim() });
+      csrf = result.csrf; initialized = true;
+      configureLogin();
+      setupToken = ""; $("#confirm-password").value = "";
+      await login("browser-session");
+    } else await login($("#admin-token").value.trim(), $("#remember").checked);
   } catch (error) {
     if (!(error instanceof StaleRequest)) {
       token = "";
@@ -470,7 +489,10 @@ $("#login-form").addEventListener("submit", async (event) => {
     button.disabled = false;
   }
 });
-$("#logout").addEventListener("click", logout);
+$("#logout").addEventListener("click", (event) => busy(event.currentTarget, async () => {
+  if (authMode === "oauth") await authRequest("/logout", "POST", {});
+  logout();
+}));
 $("#refresh").addEventListener("click", (event) =>
   busy(event.currentTarget, () => refresh()),
 );
@@ -620,14 +642,111 @@ document.addEventListener("click", (event) => {
     }
   });
 });
-let saved = null;
-try {
-  saved = sessionStorage.getItem(storageKey);
-} catch {
-  /* login still works without storage */
-}
-if (saved)
-  login(saved, true).catch((error) => {
-    if (!(error instanceof StaleRequest))
-      $("#login-error").textContent = error.message;
+const authMessages = {
+  invalid_credentials: "用户名或密码不正确。",
+  invalid_username: "用户名可使用字母、数字和 . _ @ + -，最长 128 位。",
+  setup_link_invalid: "初始化链接已失效，请让部署管理员重新生成链接。",
+  password_length: "密码需要 12 到 256 个字符。",
+  already_initialized: "已完成首次设置，请刷新页面后登录。",
+  too_many_requests: "尝试次数过多，请一分钟后再试。",
+  login_required: "登录已过期，请重新登录。",
+  authorization_expired: "授权请求已过期，请回到客户端重新发起连接。",
+};
+async function authRequest(path, method = "GET", body) {
+  const response = await fetch(`/auth${path}`, {
+    method, credentials: "same-origin", cache: "no-store",
+    headers: { "X-CSRF-Token": csrf, ...(body === undefined ? {} : { "Content-Type": "application/json" }) },
+    body: body === undefined ? undefined : JSON.stringify(body),
   });
+  const result = await response.json();
+  if (!response.ok) throw new Error(authMessages[result.error] || "请求未完成，请刷新后重试。");
+  return result;
+}
+function configureLogin() {
+  const oauth = authMode === "oauth", setup = oauth && !initialized;
+  const locked = setup && !setupReady;
+  $("#login-fields").hidden = locked;
+  const submit = $("#login-form button[type=submit]");
+  submit.hidden = locked;
+  submit.textContent = setup ? "创建账号并进入控制台" : "进入控制台";
+  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "连接你的工作空间";
+  $("#login-description").textContent = locked ? "当前还没有管理员账号。请打开部署时生成的完整初始化链接，再创建用户名和密码。" : oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录，管理服务器与客户端授权。") : "使用服务端设置的管理员 Token 登录。";
+  $("#password-label").textContent = oauth ? (setup ? "设置密码" : "密码") : "管理员 Token";
+  const input = $("#admin-token");
+  input.minLength = oauth ? (setup ? 12 : 1) : 32;
+  input.maxLength = oauth ? 256 : 4096;
+  input.autocomplete = oauth ? (setup ? "new-password" : "current-password") : "off";
+  input.placeholder = oauth ? (setup ? "至少 12 个字符" : "输入管理员密码") : "输入 SSH_MCP_ADMIN_TOKEN";
+  $("#setup-fields").hidden = !setup;
+  $("#confirm-password").required = setup;
+  $("#username-label").hidden = !oauth;
+  $("#username").required = oauth;
+  $("#login-form button[type=submit]").disabled = locked;
+  $("#remember").closest("label").hidden = oauth;
+  $(".login-help").textContent = oauth ? (setup ? (setupReady ? "初始化链接将在创建账号后失效。连接凭据由系统自动生成，无需填写。" : "请使用部署管理员提供的初始化链接创建账号。") : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
+}
+async function showConsent() {
+  const info = await authRequest(`/consent?request=${encodeURIComponent(authorizationRequest)}`);
+  $("#consent-client").textContent = `${info.client_name} 请求连接你的 SSH MCP。`;
+  $("#consent-redirect").textContent = info.redirect_uri;
+  $("#app-view").hidden = true;
+  $("#consent-view").hidden = false;
+  $("#allow-consent").focus();
+}
+for (const [id, approve] of [["#allow-consent", true], ["#deny-consent", false]]) {
+  $(id).addEventListener("click", (event) => busy(event.currentTarget, async () => {
+    const result = await authRequest("/consent", "POST", { request: authorizationRequest, approve });
+    location.assign(result.redirect);
+  }));
+}
+function renderOAuthClients() {
+  const url = state.mcp_url;
+  const code = `codex mcp add ssh_mcp --url ${url}\ncodex mcp login ssh_mcp`;
+  $("#page-content").innerHTML = `<section class="panel setup-panel"><span class="section-kicker">BROWSER AUTHORIZATION</span><h2>添加地址，在浏览器中授权</h2><p>客户端自动保存登录凭据。日常使用无需设置 Token 环境变量或运行启动脚本。</p><div class="endpoint"><code id="endpoint-url">${escapeHTML(url)}</code><button class="text-link" data-action="copy-url">复制地址</button></div><div class="step"><h3>Codex CLI</h3><div class="code-block"><div class="code-heading"><span>终端</span><button data-action="copy-config">复制命令</button></div><pre id="client-config">${escapeHTML(code)}</pre></div><p class="note">如果之前配置过 bearer_token_env_var 或固定 Authorization 请求头，请先移除，再重新登录。</p></div><div class="step"><h3>其他远程 MCP 客户端</h3><p>在 ChatGPT、Cursor 或 Claude 的 MCP 设置中添加上方 URL，选择 OAuth 或浏览器授权，然后登录并确认客户端权限。具体入口以客户端支持情况为准。</p><p class="note">这些说明不代表已在每个客户端完成验收。静态 Bearer Token 仍可作为自动化兼容方式。</p></div></section><section class="panel setup-panel"><div class="panel-title"><h2>已授权的客户端</h2><button id="load-grants" class="secondary">刷新授权</button></div><div id="grants-list">正在读取…</div><p class="note">撤销会阻止客户端继续调用 MCP，已经启动的远程进程需要在终端会话中另外关闭。</p></section>`;
+  $("#load-grants").addEventListener("click", (event) => busy(event.currentTarget, loadGrants));
+  loadGrants().catch((error) => notify(error.message, true));
+}
+async function loadGrants() {
+  const currentEpoch = epoch;
+  const result = await authRequest("/grants");
+  if (currentEpoch !== epoch || !$("#grants-list")) return;
+  grants = result.grants;
+  $("#grants-list").innerHTML = grants.length ? grants.map((g) => `<div class="grant-row"><div><strong>${escapeHTML(g.client_name)}</strong><small>${escapeHTML(new Date(g.created * 1000).toLocaleString("zh-CN"))} · ${g.revoked ? "已撤销" : "已授权"}</small></div>${g.revoked ? "" : `<button class="secondary" data-revoke="${escapeHTML(g.id)}">撤销授权</button>`}</div>`).join("") : '<p class="muted">还没有授权的客户端。</p>';
+  document.querySelectorAll("[data-revoke]").forEach((button) => button.addEventListener("click", () => busy(button, async () => {
+    await authRequest("/revoke", "POST", { grant_id: button.dataset.revoke });
+    await loadGrants();
+  })));
+}
+async function boot() {
+  const generation = ++bootGeneration, initialToken = setupToken;
+  setupToken = "";
+  if (initialToken) {
+    try { await authRequest("/setup-session", "POST", { setup_token: initialToken }); }
+    catch (error) { $("#login-error").textContent = error.message; }
+  }
+  const status = await authRequest("/session");
+  if (generation !== bootGeneration) return;
+  authMode = status.mode;
+  initialized = status.initialized !== false;
+  setupReady = status.setup_ready === true;
+  configureLogin();
+  if (authMode === "oauth") {
+    try { sessionStorage.removeItem(storageKey); } catch { /* Cookie 登录不依赖 Web Storage */ }
+    if (status.authenticated) { csrf = status.csrf; await login("browser-session"); }
+  } else {
+    let saved;
+    try { saved = sessionStorage.getItem(storageKey); } catch { /* 无存储也能登录 */ }
+    if (saved) await login(saved, true);
+  }
+}
+function startLogin() {
+  boot().catch((error) => { $("#login-error").textContent = error.message; });
+}
+window.addEventListener("hashchange", () => {
+  const value = new URLSearchParams(location.hash.slice(1)).get("setup");
+  if (!value) return;
+  setupToken = value;
+  history.replaceState(null, "", location.pathname + location.search);
+  startLogin();
+});
+startLogin();

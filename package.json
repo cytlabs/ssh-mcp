@@ -8,7 +8,8 @@
   },
   "scripts": {
     "test:ui": "node --test tests/console.bridge.test.cjs tests/console.dom.cjs",
-    "test:browser": "node tests/console.browser.cjs"
+    "test:browser": "node tests/console.browser.cjs",
+    "test:oauth-browser": "node tests/oauth.browser.cjs"
   },
   "devDependencies": {
     "jsdom": "30.1.2",

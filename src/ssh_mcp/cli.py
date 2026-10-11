@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import getpass
+import os
 import logging
 import secrets
 import sqlite3
@@ -20,10 +22,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="ssh-mcp", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("serve", "check", "list-servers"):
+    for name in ("serve", "check", "list-servers", "set-admin-password", "setup-link"):
         command = sub.add_parser(name)
         command.add_argument("--config", default="config.json", help="运行配置 JSON 路径")
         command.add_argument("--database", help="SQLite 路径，默认在配置目录的 data/ssh-mcp.sqlite3")
+        if name == "set-admin-password":
+            command.add_argument("--username", default="admin", help="管理员用户名，默认 admin")
         if name == "serve":
             command.add_argument("--transport", choices=["http", "stdio"], default="http")
     sub.add_parser("generate-token", help="生成随机 Token，请由管理员安全保存")
@@ -41,7 +45,25 @@ def main() -> None:
                 config = registry.config(config)
             finally:
                 registry.close()
-        if args.command == "list-servers":
+        if args.command == "setup-link":
+            from .identity import IdentityStore, auth_database
+            identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
+            try:
+                print(identity.setup_link(renew=True))
+            finally:
+                identity.close()
+        elif args.command == "set-admin-password":
+            from .identity import IdentityStore, auth_database, password_hash
+            password = getpass.getpass("新管理员密码（至少 12 位）：")
+            if password != getpass.getpass("再次输入密码："):
+                raise ConfigError("两次输入的密码不一致")
+            identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
+            try:
+                identity.set_password(password_hash(password), username=args.username)
+            finally:
+                identity.close()
+            print("管理员密码已设置，原浏览器登录和 OAuth 授权已撤销。")
+        elif args.command == "list-servers":
             print(json.dumps([s.public() for s in config.servers], ensure_ascii=False, indent=2))
         elif args.command == "check":
             for server in config.servers:
@@ -49,7 +71,8 @@ def main() -> None:
                     if path and not path.is_file():
                         raise ConfigError("A configured known_hosts or private key file is missing")
                 server.credentials()
-            config.token()
+            if config.auth_mode == "token" or os.environ.get(config.token_env):
+                config.token()
             print(f"配置校验通过：共 {len(config.servers)} 台服务器。尚未测试 SSH 连接。")
         else:
             from .server import create_http_app, run_stdio
@@ -66,7 +89,7 @@ def main() -> None:
                 uvicorn.run(create_http_app(config, database), host=config.listen_host,
                             port=config.listen_port, workers=1, access_log=False,
                             proxy_headers=False, log_level="warning")
-    except (ConfigError, InputError, OSError, sqlite3.Error):
+    except (ValueError, InputError, OSError, sqlite3.Error):
         print("配置校验或启动失败。请检查 JSON 字段、秘密环境变量、密钥/known_hosts 文件、"
               "SQLite 权限及监听地址。未输出任何凭据。", file=sys.stderr)
         raise SystemExit(2) from None
