@@ -64,7 +64,7 @@ cp deploy/.env.example deploy/.env
 - 把所需私钥和已经核验的 `known_hosts` 放入 `deploy/config/secrets`。
 
 编辑 `deploy/.env`，设置相同的 `SSH_MCP_DOMAIN`，分别生成随机且不同的 `SSH_MCP_TOKEN`
-和 `SSH_MCP_ADMIN_TOKEN`，只保留配置实际引用的 SSH 密码/口令环境变量。
+和 `SSH_MCP_ADMIN_TOKEN`（仅旧 Token 模式需要）；推荐 OAuth 模式无需这两个变量，只保留配置实际引用的 SSH 密码/口令环境变量。
 可以用 `ssh-mcp generate-token`，或 `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` 生成 Token。
 真实配置、`.env`、服务器清单和私钥不能提交到仓库。
 
@@ -160,7 +160,7 @@ systemd 位于 `/var/lib/ssh-mcp/inventory.sqlite3`。
 可通过 `execute_command` 执行 `id` 等简单命令核验目标。
 
 轮换 MCP Token 时，同时更新服务环境和客户端秘密存储，再重启服务。
-OAuth 模式的管理员 Token 仅用于首次设置；日常使用密码与 Cookie。旧 `token` 模式管理员 Token 仍通过环境轮换。
+OAuth 模式使用用户名、密码与 Cookie，首次链接由服务自动生成，不需要管理员 Token。旧 `token` 模式管理员 Token 仍通过环境轮换。
 SSH 凭据在目标账户及服务端密钥文件/环境变量中同时更新后重启。
 登录凭据不会出现在 `list_servers` 或配置校验输出中。
 
@@ -187,8 +187,9 @@ SSH 凭据在目标账户及服务端密钥文件/环境变量中同时更新后
 ## OAuth 升级与运维
 
 将运行配置 `http.auth_mode` 设置为 `oauth`，确认 `public_url` 是实际 HTTPS 源（含非标准端口）。
-OAuth 需要持久化数据库。首次升级保留独立的 `SSH_MCP_ADMIN_TOKEN` 作为初始化凭证，
-打开 `/console` 设置密码；新部署也可用 `set-admin-password` 在服务端初始化，无需 Bootstrap Token。
+OAuth 需要持久化数据库。首次启动自动生成一次性初始化链接，保存在身份库旁的 `*.setup-link` 文件，
+权限为 0600、一小时有效。打开该链接创建用户名密码；过期可使用 `setup-link` 命令重发。
+新部署无需设置 `SSH_MCP_ADMIN_TOKEN` 或 `SSH_MCP_TOKEN`，客户端凭据在 OAuth 授权后自动签发。
 
 升级前备份两个 SQLite（身份库第一次启用时新建）、配置、服务环境及当前 wheel。
 重启前确认没有需要保留的 SSH 会话。回滚到旧版本并恢复原配置会停用 OAuth，但不会删除身份库。

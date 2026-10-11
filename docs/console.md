@@ -5,29 +5,38 @@
 
 ## 启动
 
-示例配置启用 `http.auth_mode: "oauth"`。先设置用于一次性初始化的随机凭据：
+示例配置启用 `http.auth_mode: "oauth"`，使用用户名和密码登录：
 
 ```sh
-export SSH_MCP_ADMIN_TOKEN="$(ssh-mcp generate-token)"
 ssh-mcp serve --config config.json --database data/ssh-mcp.sqlite3
 ```
 
-通过公开 HTTPS `/console` 设置管理员密码（12–256 个字符），首次设置凭证填上述管理员 Token。
-以后只输入密码。浏览器使用 Secure、HttpOnly、SameSite=Lax Cookie，8 小时后过期；
-JavaScript 不持有原始登录凭据，也不在 sessionStorage 保存管理员 Token。
-首次设置后可移除服务环境中的 `SSH_MCP_ADMIN_TOKEN`；重启不会丢失密码或 OAuth 授权。
+首次启动自动生成一次性初始化链接，保存在数据库旁的 `ssh-mcp.auth.setup-link`，权限为 `0600`。
+部署管理员把链接交给使用者，打开后只需创建用户名与密码（12–256 个字符），无需输入 Token。
+链接一小时内有效，创建账号后立即失效且服务端链接文件会删除。链接秘密放在 URL 片段中，
+不会作为网页请求地址或 Referer 发往服务器；页面读取后会立即清除地址栏片段。
+
+以后使用用户名和密码登录，浏览器通过 Secure、HttpOnly、SameSite=Lax Cookie 保持 8 小时会话。
+MCP 客户端令牌由服务自动生成和刷新；没有邮箱验证、找回邮件或第三方登录依赖。
+
+初始化链接丢失或过期时，以服务账户运行以下命令生成新链接（旧链接同时失效）：
+
+```sh
+ssh-mcp setup-link --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
+```
 
 忘记密码时，在服务端以服务账户运行（路径与服务一致）：
 
 ```sh
-ssh-mcp set-admin-password --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
+ssh-mcp set-admin-password --username admin --config /etc/ssh-mcp/config.json --database /var/lib/ssh-mcp/inventory.sqlite3
 ```
 
 命令交互读取密码，不把密码放到参数或日志；重设会撤销全部浏览器登录及 OAuth 授权。
 静态 MCP Token 独立管理，不随密码重设撤销。共享实例为单操作者，不提供多用户隔离。
 
 旧配置省略 `auth_mode` 时保持 `token` 行为：独立管理员 Token 登录，可选标签页 sessionStorage。
-迁移到 OAuth 后旧管理员 Token 只用于首次设置，不再授权 `/admin/`；现有 MCP Token 可保留兼容。
+OAuth 模式不再使用管理员 Token，包括首次初始化；现有 MCP Token 可保留兼容。
+旧版已有密码的账户升级后用户名为 `admin`，密码保留。
 OAuth 管理界面必须通过 HTTPS 使用，HTTP 无法携带 Secure Cookie。
 
 ## 页面能力

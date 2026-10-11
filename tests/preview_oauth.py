@@ -2,6 +2,7 @@
 import asyncio
 import datetime
 import ipaddress
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -30,7 +31,7 @@ async def main():
         (root / "cert.pem").write_bytes(cert.public_bytes(serialization.Encoding.PEM))
         (root / "key.pem").write_bytes(key.private_bytes(serialization.Encoding.PEM,
             serialization.PrivateFormat.PKCS8, serialization.NoEncryption()))
-        os.environ["SSH_MCP_ADMIN_TOKEN"] = "browser-fixture-only-not-a-real-secret-" + "x" * 32
+        os.environ.pop("SSH_MCP_ADMIN_TOKEN", None)
         os.environ.pop("SSH_MCP_TOKEN", None)
         app = create_http_app(Config(servers=(), auth_mode="oauth", public_url="https://127.0.0.1:18766"), root / "inventory.sqlite3")
         server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=18766,
@@ -41,7 +42,7 @@ async def main():
                 await task
                 raise RuntimeError("预览服务启动失败")
             await asyncio.sleep(0.02)
-        print("ready", flush=True)
+        print(json.dumps({"setup_url": app.store.setup_link()}), flush=True)
         await task
 
 

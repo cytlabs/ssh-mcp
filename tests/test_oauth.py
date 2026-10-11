@@ -40,7 +40,8 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         console = Console(BearerAuth(mcp, validator=self.store.access_valid,
                                     challenge=f'Bearer resource_metadata="{ORIGIN}/.well-known/oauth-protected-resource/mcp"'.encode()),
                           manager, self.registry, None)
-        self.app = OAuth(console, self.store, BOOTSTRAP)
+        self.app = OAuth(console, self.store)
+        self.setup_token = self.store.setup_link().split("#setup=")[1]
         self.client = httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app), base_url=ORIGIN)
         self.csrf = ""
 
@@ -54,7 +55,7 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         return await self.client.post(path, json=data, headers={"Origin": ORIGIN, "X-CSRF-Token": self.csrf, **extra})
 
     async def login(self):
-        response = await self.browser("/auth/setup", {"password": PASSWORD, "bootstrap": BOOTSTRAP})
+        response = await self.browser("/auth/setup", {"username": "admin", "password": PASSWORD, "setup_token": self.setup_token})
         self.assertEqual(response.status_code, 200, response.text)
         self.csrf = response.json()["csrf"]
         return response
@@ -161,10 +162,10 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 302)
 
     async def test_csrf_setup_login_logout_and_consent_binding(self):
-        response = await self.client.post("/auth/setup", json={"password": PASSWORD, "bootstrap": BOOTSTRAP})
+        response = await self.client.post("/auth/setup", json={"username": "admin", "password": PASSWORD, "setup_token": self.setup_token})
         self.assertEqual(response.status_code, 403)
         await self.login()
-        self.assertEqual((await self.browser("/auth/setup", {"password": PASSWORD, "bootstrap": BOOTSTRAP})).status_code, 409)
+        self.assertEqual((await self.browser("/auth/setup", {"username": "admin", "password": PASSWORD, "setup_token": self.setup_token})).status_code, 409)
         response = await self.client.post("/auth/logout", json={}, headers={"Origin": ORIGIN})
         self.assertEqual(response.status_code, 401)
         response = await self.client.post("/admin/servers", json={}, headers={"Origin": "https://evil.example", "X-CSRF-Token": self.csrf})
@@ -183,9 +184,11 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("error=access_denied", denied.json()["redirect"])
         self.assertEqual((await self.browser("/auth/logout", {})).status_code, 200)
         self.assertEqual((await self.client.get("/admin/state")).status_code, 401)
-        bad = await self.browser("/auth/login", {"password": "wrong"})
+        bad_user = await self.browser("/auth/login", {"username": "other", "password": PASSWORD})
+        self.assertEqual(bad_user.status_code, 401)
+        bad = await self.browser("/auth/login", {"username": "admin", "password": "wrong"})
         self.assertEqual(bad.status_code, 401)
-        self.assertEqual((await self.browser("/auth/login", {"password": PASSWORD})).status_code, 200)
+        self.assertEqual((await self.browser("/auth/login", {"username": "admin", "password": PASSWORD})).status_code, 200)
 
     async def test_client_authentication_and_registration_validation(self):
         await self.login()
@@ -235,8 +238,50 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rate_limit_does_not_leak_credentials(self):
         for _ in range(10):
-            response = await self.browser("/auth/login", {"password": PASSWORD})
+            response = await self.browser("/auth/login", {"username": "admin", "password": PASSWORD})
             self.assertEqual(response.status_code, 401)
-        response = await self.browser("/auth/login", {"password": PASSWORD})
+        response = await self.browser("/auth/login", {"username": "admin", "password": PASSWORD})
         self.assertEqual(response.status_code, 429)
         self.assertNotIn(PASSWORD, response.text)
+
+
+class SetupTests(unittest.TestCase):
+    def test_auto_setup_link_expiry_rotation_and_single_use(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "identity.sqlite3"
+            store = IdentityStore(path, RESOURCE)
+            self.addCleanup(store.close)
+            first = store.setup_link()
+            self.assertEqual(store.setup_link(), first)
+            self.assertEqual(store.setup_path.stat().st_mode & 0o777, 0o600)
+            self.assertNotIn(first.split("#setup=")[1].encode(), path.read_bytes())
+            second = store.setup_link(renew=True)
+            self.assertNotEqual(first, second)
+            encoded = password_hash(PASSWORD)
+            with self.assertRaises(AuthError):
+                store.set_password(encoded, initial=True, setup_token=first.split("#setup=")[1])
+            store.db.execute("UPDATE setup SET expires=0")
+            with self.assertRaises(AuthError):
+                store.set_password(encoded, initial=True, setup_token=second.split("#setup=")[1])
+            third = store.setup_link()
+            store.set_password(encoded, username="owner", initial=True, setup_token=third.split("#setup=")[1])
+            self.assertEqual(store.owner_username(), "owner")
+            self.assertFalse(store.setup_path.exists())
+            with self.assertRaises(AuthError):
+                store.setup_link()
+            with self.assertRaises(AuthError):
+                store.set_password(encoded, initial=True, setup_token=third.split("#setup=")[1])
+
+    def test_upgrade_existing_password_database_keeps_admin_username(self):
+        import sqlite3
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "identity.sqlite3"
+            with sqlite3.connect(path) as db:
+                db.execute("CREATE TABLE owner(id INTEGER PRIMARY KEY, password TEXT)")
+                db.execute("INSERT INTO owner VALUES(1,?)", (password_hash(PASSWORD),))
+            store = IdentityStore(path, RESOURCE)
+            try:
+                self.assertEqual(store.owner_username(), "admin")
+                self.assertIsNotNone(store.owner_password())
+            finally:
+                store.close()

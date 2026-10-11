@@ -77,6 +77,7 @@
             <span class="section-kicker">管理控制台</span>
             <h2 id="login-title">连接你的工作空间</h2>
             <p id="login-description">正在读取登录方式…</p>
+            <label id="username-label" hidden>用户名<input id="username" autocomplete="username" maxlength="128" placeholder="例如 admin" /></label>
             <label id="password-label" for="admin-token">管理员 Token</label
             ><input
               id="admin-token"
@@ -93,7 +94,6 @@
             >
             <div id="setup-fields" hidden>
               <label for="confirm-password">确认密码</label><input id="confirm-password" type="password" autocomplete="new-password" />
-              <label for="bootstrap-token">首次设置凭证</label><input id="bootstrap-token" type="password" autocomplete="off" />
             </div>
             <p id="login-error" class="form-error" role="alert"></p>
             <button class="primary wide" type="submit">

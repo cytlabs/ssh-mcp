@@ -32,6 +32,8 @@ const titles = {
     "查看最近的管理操作。记录不包含命令正文和凭据。",
   ],
 };
+let setupToken = new URLSearchParams(location.hash.slice(1)).get("setup") || "";
+if (setupToken) history.replaceState(null, "", location.pathname + location.search);
 let authMode = "token", csrf = "", initialized = true, grants = [];
 let authorizationRequest = new URLSearchParams(location.search).get("authorize");
 let token = "",
@@ -471,10 +473,10 @@ $("#login-form").addEventListener("submit", async (event) => {
     if (authMode === "oauth") {
       const password = $("#admin-token").value;
       if (!initialized && password !== $("#confirm-password").value) throw new Error("两次输入的密码不一致。");
-      const result = await authRequest(initialized ? "/login" : "/setup", "POST", { password, bootstrap: $("#bootstrap-token").value });
+      const result = await authRequest(initialized ? "/login" : "/setup", "POST", { password, username: $("#username").value.trim(), setup_token: setupToken });
       csrf = result.csrf; initialized = true;
       configureLogin();
-      $("#bootstrap-token").value = ""; $("#confirm-password").value = "";
+      setupToken = ""; $("#confirm-password").value = "";
       await login("browser-session");
     } else await login($("#admin-token").value.trim(), $("#remember").checked);
   } catch (error) {
@@ -640,7 +642,9 @@ document.addEventListener("click", (event) => {
   });
 });
 const authMessages = {
-  invalid_credentials: "密码或首次设置凭证不正确。",
+  invalid_credentials: "用户名或密码不正确。",
+  invalid_username: "用户名可使用字母、数字和 . _ @ + -，最长 128 位。",
+  setup_link_invalid: "初始化链接已失效，请让部署管理员重新生成链接。",
   password_length: "密码需要 12 到 256 个字符。",
   already_initialized: "已完成首次设置，请刷新页面后登录。",
   too_many_requests: "尝试次数过多，请一分钟后再试。",
@@ -659,9 +663,9 @@ async function authRequest(path, method = "GET", body) {
 }
 function configureLogin() {
   const oauth = authMode === "oauth", setup = oauth && !initialized;
-  $("#login-title").textContent = setup ? "设置管理员密码" : "连接你的工作空间";
-  $("#login-description").textContent = oauth ? (setup ? "首次设置后，用密码登录并管理客户端授权。" : "输入管理员密码，继续管理服务器和客户端授权。") : "使用服务端设置的管理员 Token 登录。";
-  $("#password-label").textContent = oauth ? (setup ? "设置密码" : "管理员密码") : "管理员 Token";
+  $("#login-title").textContent = setup ? "创建管理员账号" : "连接你的工作空间";
+  $("#login-description").textContent = oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录，管理服务器与客户端授权。") : "使用服务端设置的管理员 Token 登录。";
+  $("#password-label").textContent = oauth ? (setup ? "设置密码" : "密码") : "管理员 Token";
   const input = $("#admin-token");
   input.minLength = oauth ? (setup ? 12 : 1) : 32;
   input.maxLength = oauth ? 256 : 4096;
@@ -669,9 +673,11 @@ function configureLogin() {
   input.placeholder = oauth ? (setup ? "至少 12 个字符" : "输入管理员密码") : "输入 SSH_MCP_ADMIN_TOKEN";
   $("#setup-fields").hidden = !setup;
   $("#confirm-password").required = setup;
-  $("#bootstrap-token").required = setup;
+  $("#username-label").hidden = !oauth;
+  $("#username").required = oauth;
+  $("#login-form button[type=submit]").disabled = setup && !setupToken;
   $("#remember").closest("label").hidden = oauth;
-  $(".login-help").textContent = oauth ? (setup ? "首次设置凭证使用服务端的 SSH_MCP_ADMIN_TOKEN。它只用于初始化；日常登录无需复制 Token。" : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
+  $(".login-help").textContent = oauth ? (setup ? (setupToken ? "初始化链接将在创建账号后失效。连接凭据由系统自动生成，无需填写。" : "请使用部署管理员提供的初始化链接创建账号。") : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
 }
 async function showConsent() {
   const info = await authRequest(`/consent?request=${encodeURIComponent(authorizationRequest)}`);

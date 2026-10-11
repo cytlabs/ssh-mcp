@@ -46,7 +46,6 @@ chmod 700 secrets
 密码通过 `password_env` 引用服务端环境变量。`known_hosts` 必须包含核验过的主机公钥。
 
 ```sh
-export SSH_MCP_ADMIN_TOKEN="$(ssh-mcp generate-token)"
 ssh-mcp check --config config.json
 ssh-mcp serve --config config.json
 ```
@@ -54,7 +53,8 @@ ssh-mcp serve --config config.json
 默认只监听 `127.0.0.1:8000`，MCP 路径为 `/mcp`。
 远程使用时，按 [部署说明](docs/deployment.md) 配置 HTTPS 入口。
 
-通过 HTTPS 打开 `/console`，用 `SSH_MCP_ADMIN_TOKEN` 完成一次性密码设置，以后用密码登录。
+首次启动自动生成一次性初始化链接，保存在身份数据库旁的 `*.auth.setup-link` 文件（仅服务账户可读）。
+通过该链接创建用户名和密码，以后直接打开 HTTPS `/console` 登录，无需填写 Token。
 AI 客户端填写 MCP URL 并在浏览器授权，无需设置 Token 环境变量。首次启动将 JSON 中的服务器
 导入 SQLite，以后通过页面维护并立即生效。配置和记录在重启后保留，SSH 会话不恢复。
 认证区别、数据库位置和备份方式见 [管理控制台说明](docs/console.md)。

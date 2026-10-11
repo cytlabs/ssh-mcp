@@ -241,9 +241,8 @@ def create_http_app(config: Config, database: Path | None = None):
         if database is None:
             raise ConfigError("OAuth requires a persistent database path")
         identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
-        if not identity.owner_password() and not admin_token:
-            identity.close()
-            raise ConfigError("Set SSH_MCP_ADMIN_TOKEN for initial setup or use set-admin-password")
+        if not identity.owner_password():
+            identity.setup_link()
     registry = Registry(config, database)
     config = registry.config(config)
     mcp, manager = create_server(config)
@@ -267,7 +266,7 @@ def create_http_app(config: Config, database: Path | None = None):
                      + '/.well-known/oauth-protected-resource/mcp", scope="ssh:access"').encode()
         console = Console(BearerAuth(app, token, validator=identity.access_valid, challenge=challenge),
                           manager, registry, None)
-        return OAuth(console, identity, admin_token)
+        return OAuth(console, identity)
     return Console(BearerAuth(app, token), manager, registry, admin_token)
 
 

@@ -33,8 +33,8 @@ def pairs(raw):
 
 
 class OAuth:
-    def __init__(self, console, store, bootstrap):
-        self.app, self.store, self.bootstrap = console, store, bootstrap
+    def __init__(self, console, store):
+        self.app, self.store = console, store
         self.origin = store.resource.removesuffix("/mcp")
         self.limits = defaultdict(deque)
         self.hashers = asyncio.Semaphore(2)
@@ -175,19 +175,17 @@ class OAuth:
                 raise AuthError()
             async with self.hashers:
                 if path.endswith("/setup"):
-                    supplied = data.get("bootstrap", "")
-                    if (not self.bootstrap or not isinstance(supplied, str)
-                            or not hmac.compare_digest(supplied.encode(), self.bootstrap.encode())):
-                        raise AuthError("invalid_credentials", 401)
                     if self.store.owner_password():
                         raise AuthError("already_initialized", 409)
                     encoded = await asyncio.to_thread(password_hash, password)
-                    self.store.set_password(encoded, initial=True)
+                    self.store.set_password(encoded, initial=True, username=data.get("username", ""),
+                                            setup_token=data.get("setup_token", ""))
                 else:
                     encoded = self.store.owner_password()
                     if not encoded or not await asyncio.to_thread(password_matches, password, encoded):
                         raise AuthError("invalid_credentials", 401)
-                    if self.store.owner_password() != encoded:
+                    if (self.store.owner_password() != encoded
+                            or data.get("username") != self.store.owner_username()):
                         raise AuthError("invalid_credentials", 401)
             return self.session_response(self.store.browser_session())
         if path.startswith("/auth/"):

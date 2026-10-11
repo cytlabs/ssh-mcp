@@ -22,10 +22,12 @@ def main() -> None:
     parser = argparse.ArgumentParser(prog="ssh-mcp", description=__doc__)
     parser.add_argument("--version", action="version", version=__version__)
     sub = parser.add_subparsers(dest="command", required=True)
-    for name in ("serve", "check", "list-servers", "set-admin-password"):
+    for name in ("serve", "check", "list-servers", "set-admin-password", "setup-link"):
         command = sub.add_parser(name)
         command.add_argument("--config", default="config.json", help="运行配置 JSON 路径")
         command.add_argument("--database", help="SQLite 路径，默认在配置目录的 data/ssh-mcp.sqlite3")
+        if name == "set-admin-password":
+            command.add_argument("--username", default="admin", help="管理员用户名，默认 admin")
         if name == "serve":
             command.add_argument("--transport", choices=["http", "stdio"], default="http")
     sub.add_parser("generate-token", help="生成随机 Token，请由管理员安全保存")
@@ -43,14 +45,21 @@ def main() -> None:
                 config = registry.config(config)
             finally:
                 registry.close()
-        if args.command == "set-admin-password":
+        if args.command == "setup-link":
+            from .identity import IdentityStore, auth_database
+            identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
+            try:
+                print(identity.setup_link(renew=True))
+            finally:
+                identity.close()
+        elif args.command == "set-admin-password":
             from .identity import IdentityStore, auth_database, password_hash
             password = getpass.getpass("新管理员密码（至少 12 位）：")
             if password != getpass.getpass("再次输入密码："):
                 raise ConfigError("两次输入的密码不一致")
             identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
             try:
-                identity.set_password(password_hash(password))
+                identity.set_password(password_hash(password), username=args.username)
             finally:
                 identity.close()
             print("管理员密码已设置，原浏览器登录和 OAuth 授权已撤销。")

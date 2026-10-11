@@ -11,12 +11,12 @@ const origin = "https://127.0.0.1:18766";
   const fixture = spawn(process.env.PYTHON || "python3", ["tests/preview_oauth.py"], {
     cwd: root, env: { ...process.env, PYTHONPATH: path.join(root, "src") }, stdio: ["ignore", "pipe", "pipe"],
   });
-  let browser;
+  let browser, setupURL;
   const exited = new Promise((resolve) => fixture.once("exit", resolve));
   try {
     await new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("OAuth 夹具启动超时")), 15000);
-      fixture.stdout.once("data", () => { clearTimeout(timer); resolve(); });
+      fixture.stdout.once("data", (data) => { setupURL = JSON.parse(data.toString()).setup_url; clearTimeout(timer); resolve(); });
       fixture.once("exit", () => { clearTimeout(timer); reject(new Error("OAuth 夹具退出")); });
     });
     browser = await chromium.launch({ headless: true });
@@ -24,12 +24,15 @@ const origin = "https://127.0.0.1:18766";
     const page = await context.newPage(), errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
     page.on("response", (r) => { if (new URL(r.url()).pathname === "/auth/consent") console.log("授权请求状态", r.status()); });
-    await page.goto(origin + "/console");
-    await page.getByRole("heading", { name: "设置管理员密码" }).waitFor();
+    await page.goto(setupURL);
+    await page.getByRole("heading", { name: "创建管理员账号" }).waitFor();
     const password = "browser-fixture-password-only";
+    await page.locator("#username").fill("admin");
     await page.locator("#admin-token").fill(password);
     await page.locator("#confirm-password").fill(password);
-    await page.locator("#bootstrap-token").fill("browser-fixture-only-not-a-real-secret-" + "x".repeat(32));
+    await page.locator("#username").fill("admin");
+    assert.equal(await page.locator("#bootstrap-token").count(), 0);
+    assert.equal(new URL(page.url()).hash, "");
     await page.locator("#login-form button[type=submit]").click();
     await page.locator("#app-view").waitFor({ state: "visible" });
     assert.equal(await page.evaluate(() => document.cookie), "");
@@ -91,6 +94,7 @@ const origin = "https://127.0.0.1:18766";
     await page.locator("#login-view").waitFor({ state: "visible" });
     await page.reload();
     await page.getByRole("heading", { name: "连接你的工作空间" }).waitFor();
+    await page.locator("#username").fill("admin");
     await page.locator("#admin-token").fill(password);
     await page.locator("#login-form button[type=submit]").click();
     await page.locator("#app-view").waitFor({ state: "visible" });

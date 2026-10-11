@@ -89,6 +89,7 @@ def auth_database(inventory: Path | None) -> Path | None:
 class IdentityStore:
     def __init__(self, filename: Path | None, resource: str):
         self.resource = resource
+        self.setup_path = filename.with_suffix(".setup-link") if filename else None
         self.lock = threading.RLock()
         if filename:
             filename.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -101,6 +102,7 @@ class IdentityStore:
         self.db.executescript("""
             PRAGMA foreign_keys=ON;
             CREATE TABLE IF NOT EXISTS owner(id INTEGER PRIMARY KEY CHECK(id=1), password TEXT);
+            CREATE TABLE IF NOT EXISTS setup(id INTEGER PRIMARY KEY CHECK(id=1), hash TEXT, expires REAL);
             CREATE TABLE IF NOT EXISTS browser_sessions(hash TEXT PRIMARY KEY, expires REAL);
             CREATE TABLE IF NOT EXISTS clients(
                 id TEXT PRIMARY KEY, name TEXT, redirects TEXT, method TEXT,
@@ -117,6 +119,8 @@ class IdentityStore:
                 hash TEXT PRIMARY KEY, kind TEXT, grant_id TEXT, client_id TEXT,
                 expires REAL, used INTEGER DEFAULT 0);
         """)
+        if "username" not in {row[1] for row in self.db.execute("PRAGMA table_info(owner)")}:
+            self.db.execute("ALTER TABLE owner ADD COLUMN username TEXT NOT NULL DEFAULT 'admin'")
 
     @contextmanager
     def transaction(self):
@@ -144,14 +148,51 @@ class IdentityStore:
             row = self.db.execute("SELECT password FROM owner WHERE id=1").fetchone()
             return row[0] if row else None
 
-    def set_password(self, encoded: str, *, initial=False):
+    def owner_username(self):
+        with self.lock:
+            row = self.db.execute("SELECT username FROM owner WHERE id=1").fetchone()
+            return row[0] if row else None
+
+    def setup_link(self, *, renew=False):
+        """仅供服务器管理员读取；不会通过公开 HTTP 返回初始化秘密。"""
         with self.transaction():
-            if initial and self.owner_password():
+            if self.owner_password():
                 raise AuthError("already_initialized", 409)
-            self.db.execute("INSERT OR REPLACE INTO owner VALUES(1,?)", (encoded,))
+            if self.setup_path and self.setup_path.exists() and not renew:
+                saved = self.setup_path.read_text().strip()
+                raw = saved.rsplit("#setup=", 1)[-1]
+                if self.db.execute("SELECT 1 FROM setup WHERE hash=? AND expires>?",
+                                   (digest(raw), time.time())).fetchone():
+                    return saved
+            raw = secrets.token_urlsafe(32)
+            self.db.execute("INSERT OR REPLACE INTO setup VALUES(1,?,?)", (digest(raw), time.time() + 3600))
+            link = self.resource.removesuffix("/mcp") + "/console#setup=" + raw
+            if self.setup_path:
+                temporary = self.setup_path.with_name(self.setup_path.name + "." + secrets.token_hex(6))
+                fd = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                with os.fdopen(fd, "w") as output:
+                    output.write(link + "\n")
+                os.replace(temporary, self.setup_path)
+            return link
+
+    def set_password(self, encoded: str, *, username="admin", initial=False, setup_token=""):
+        if not isinstance(username, str) or not re.fullmatch(r"[A-Za-z0-9_.@+-]{1,128}", username):
+            raise AuthError("invalid_username")
+        with self.transaction():
+            if initial:
+                if self.owner_password():
+                    raise AuthError("already_initialized", 409)
+                if not isinstance(setup_token, str) or not self.db.execute(
+                    "SELECT 1 FROM setup WHERE hash=? AND expires>?", (digest(setup_token), time.time())
+                ).fetchone():
+                    raise AuthError("setup_link_invalid", 401)
+            self.db.execute("INSERT OR REPLACE INTO owner(id,password,username) VALUES(1,?,?)", (encoded, username))
+            self.db.execute("DELETE FROM setup")
             self.db.execute("DELETE FROM browser_sessions")
             self.db.execute("DELETE FROM pending")
             self.db.execute("UPDATE grants SET revoked=1")
+        if self.setup_path:
+            self.setup_path.unlink(missing_ok=True)
 
     def browser_session(self):
         raw = secrets.token_urlsafe(32)
