@@ -8,6 +8,7 @@ import asyncio
 import json
 import sys
 import tempfile
+import time
 import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -59,7 +60,11 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--port", type=int, default=8765)
     parser.add_argument("--stdio", action="store_true", help="DOM test bridge without network listeners")
+    parser.add_argument("--startup-delay-ms", type=int, default=0, help="仅用于夹具慢启动回归")
     args = parser.parse_args()
+    if not 0 <= args.startup_delay_ms <= 10000:
+        parser.error("启动延迟必须在 0 到 10000 毫秒之间")
+    time.sleep(args.startup_delay_ms / 1000)
     with tempfile.TemporaryDirectory(prefix="ssh-mcp-ui-") as temp:
         config = parse_config({"servers": [
             {"id": "staging", "host": "192.0.2.10", "username": "ops", "description": "产品测试环境",
@@ -80,6 +85,7 @@ def main():
 
         if args.stdio:
             try:
+                print(json.dumps({"event": "ready"}), flush=True)
                 for line in sys.stdin:
                     request = json.loads(line)
                     messages = []
