@@ -2,6 +2,24 @@
 
 日期：2026-10-09。版本：`0.1.0a1`（开发预览，未发布正式版本）。
 
+## 2026-10-11：DOM 测试稳定性修复
+
+主分支 `dad8c51` 的 [首次 CI](https://github.com/cytlabs/ssh-mcp/actions/runs/37889275394/attempts/1)
+在 DOM 登录错误提示等待处超时，其余依赖步骤连锁失败；
+[第二次运行](https://github.com/cytlabs/ssh-mcp/actions/runs/37889275394/attempts/2) 全部通过。
+重跑没有修改代码，不能据此认为偶发问题已经修复，见 [Issue #6](https://github.com/cytlabs/ssh-mcp/issues/6)。
+
+本轮增加明确的夹具就绪信号、独立启动/请求/页面时限、有限状态诊断和失败后跳过依赖步骤。
+正常及延迟 3 秒启动的 DOM 流程共 18 项通过，另有 6 项桥接异常与取消测试通过。
+本地使用已有 jsdom 安装，并非重新执行锁文件安装；完整锁定依赖与浏览器检查仍以本次 CI 为准。
+提交 `bc2694e` 的 [PR CI](https://github.com/cytlabs/ssh-mcp/actions/runs/38118471762)
+及 [分支 CI](https://github.com/cytlabs/ssh-mcp/actions/runs/38118453365) 均通过全部五个任务。
+锁定安装后的前端测试 24 项通过、无跳过，桌面/手机浏览器流程通过；三版本 Python、构建、
+审计及容器检查通过。原偶发超时的原因未被唯一确定；本轮已消除启动就绪缺口并补充诊断，
+如再出现超时，应根据新状态信息继续定位，不能用自动重试掩盖。
+本地 Python 35 项通过、集成模块跳过，原因是该环境未安装运行依赖。
+只读部署检查脚本通过 Shell 语法检查，尚未在生产主机执行；未进行生产部署或真实客户端验收。
+
 ## 依赖锁定后验证（PR #5）
 
 提交 `632d7c70` 的 [CI](https://github.com/cytlabs/ssh-mcp/actions/runs/37889056073) 五个任务全部通过：Python 3.10/3.12/3.13 各 45 项测试、Ruff、非隔离打包、wheel 控制台资源检查、Python 依赖审计，以及 Docker 构建、DOM/桌面/手机浏览器流程与 npm 审计。

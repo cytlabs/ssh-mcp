@@ -1,50 +1,29 @@
-// Real UI + real Python admin/SQLite handlers. SSH is a test fixture; no browser rendering.
+// 真实页面脚本与 Python 管理 API / SQLite；SSH 为模拟夹具，不验证浏览器渲染。
 const { test } = require("node:test");
 const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const path = require("node:path");
-const { spawn } = require("node:child_process");
-const readline = require("node:readline");
+const { startBridge } = require("./console.bridge.cjs");
 const { JSDOM } = require(process.env.JSDOM_MODULE || "jsdom");
 const root = path.resolve(__dirname, "..");
 const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
 
-test(
-  "console UI → admin API → SQLite workflow",
-  { timeout: 30000 },
+for (const startupDelay of [0, 3000]) test(
+  `控制台 → 管理 API → SQLite（启动延迟 ${startupDelay}ms）`,
+  { timeout: 90000 },
   async (t) => {
-    const backend = spawn(
+    const bridge = startBridge(
       process.env.PYTHON || "python3",
-      ["tests/preview_console.py", "--stdio"],
-      {
-        cwd: root,
-        env: { ...process.env, PYTHONPATH: path.join(root, "src") },
-        stdio: ["pipe", "pipe", "pipe"],
-      },
+      ["tests/preview_console.py", "--stdio", "--startup-delay-ms", String(startupDelay)],
+      { cwd: root, env: { ...process.env, PYTHONPATH: path.join(root, "src") } },
     );
-    let next = 0,
-      stderr = "";
-    const pending = new Map();
-    backend.stderr.on("data", (chunk) => {
-      stderr += chunk;
+    let dom;
+    t.after(async () => {
+      dom?.window.close();
+      await bridge.close();
     });
-    readline.createInterface({ input: backend.stdout }).on("line", (line) => {
-      const result = JSON.parse(line),
-        request = pending.get(result.id);
-      if (request) {
-        pending.delete(result.id);
-        request.resolve({
-          ok: result.status < 400,
-          status: result.status,
-          json: async () => JSON.parse(result.body),
-        });
-      }
-    });
-    backend.on("exit", () => {
-      pending.forEach((p) => p.reject(new Error(stderr || "Backend exited")));
-      pending.clear();
-    });
-    const dom = new JSDOM(
+    await bridge.ready;
+    dom = new JSDOM(
       fs.readFileSync(path.join(root, "src/ssh_mcp/static/index.html"), "utf8"),
       {
         url: "http://localhost:8765/console",
@@ -52,11 +31,6 @@ test(
         pretendToBeVisual: true,
       },
     );
-    t.after(() => {
-      dom.window.close();
-      backend.stdin.end();
-      backend.kill();
-    });
     const w = dom.window,
       doc = w.document;
     w.HTMLDialogElement.prototype.showModal = function () {
@@ -67,28 +41,7 @@ test(
       if (value !== undefined) this.returnValue = value;
       this.dispatchEvent(new w.Event("close"));
     };
-    w.fetch = (url, options = {}) =>
-      new Promise((resolve, reject) => {
-        const id = ++next;
-        pending.set(id, { resolve, reject });
-        backend.stdin.write(
-          JSON.stringify({
-            id,
-            path: url,
-            method: options.method,
-            headers: options.headers,
-            body: options.body,
-          }) + "\n",
-        );
-        options.signal?.addEventListener(
-          "abort",
-          () => {
-            pending.delete(id);
-            reject(new w.DOMException("Aborted", "AbortError"));
-          },
-          { once: true },
-        );
-      });
+    w.fetch = (url, options) => bridge.fetch(url, options);
     const errors = [];
     w.addEventListener("error", (event) => errors.push(event.error));
     w.eval(
@@ -96,12 +49,15 @@ test(
     );
     const $ = (s) => doc.querySelector(s);
     const wait = async (predicate) => {
-      for (let i = 0; i < 200; i++) {
+      const deadline = performance.now() + 8000;
+      while (performance.now() < deadline) {
+        bridge.assertHealthy();
+        if (errors.length) throw new Error("页面脚本发生异常");
         if (predicate()) return;
         await new Promise((r) => setTimeout(r, 10));
       }
       throw new Error(
-        "UI condition timed out: " + predicate.toString() + "\n" + stderr,
+        "页面等待超时: " + predicate.toString() + "; " + bridge.snapshot(),
       );
     };
     const click = (selector) => {
@@ -124,8 +80,17 @@ test(
       $("#server-form").elements[name].value = value;
     };
 
-    await t.test(
-      "login rejects the wrong token and accepts admin; keeps requested tab session",
+    // 这是一个有序的用户旅程。前置步骤失败后，保留首个错误，跳过依赖步骤。
+    let failed = false;
+    const step = (name, run) => t.test(name, {
+      skip: failed ? "前置步骤失败" : false,
+    }, async () => {
+      try { await run(); }
+      catch (error) { failed = true; throw error; }
+    });
+
+    await step(
+      "登录拒绝错误 Token，接受管理员 Token 并按选择保留会话",
       async () => {
         $("#admin-token").value = "wrong".repeat(10);
         submit("#login-form");
@@ -139,15 +104,15 @@ test(
         assert.equal($("#admin-token").value, "");
       },
     );
-    await t.test("search and empty result recover", async () => {
+    await step("搜索和空结果恢复", async () => {
       $("#server-search").value = "missing";
       $("#server-search").dispatchEvent(new w.Event("input"));
       assert.match($("#server-rows").textContent, /没有匹配/);
       click("[data-action=clear-search]");
       assert.equal(doc.querySelectorAll(".server-row").length, 3);
     });
-    await t.test(
-      "create server saves through SQLite and treats HTML as text",
+    await step(
+      "创建服务器保存到 SQLite，HTML 按文本展示",
       async () => {
         click("#add-server");
         for (const [k, v] of Object.entries({
@@ -174,7 +139,7 @@ test(
         );
       },
     );
-    await t.test("edit and test connection use backend handlers", async () => {
+    await step("编辑与连接检查调用真实管理处理器", async () => {
       click("[data-action=edit]");
       setField("description", "已编辑");
       submit("#server-form");
@@ -186,7 +151,7 @@ test(
       click("[data-action=test][data-id=browser-added]");
       await wait(() => $("#server-rows").textContent.includes("可连接"));
     });
-    await t.test("session creation, input, output, and closure", async () => {
+    await step("会话创建、输入、输出和关闭", async () => {
       click("[data-action=open-session]");
       await wait(() => !!$("#terminal-input"));
       $("#terminal-input").value = "echo hello";
@@ -199,8 +164,8 @@ test(
       $("#confirm-dialog").close("confirm");
       await wait(() => !$("#terminal-input"));
     });
-    await t.test(
-      "client configuration includes endpoint and no admin credential",
+    await step(
+      "客户端配置包含入口且不含管理员凭据",
       async () => {
         click("[data-view=clients]");
         assert.match($("#client-config").textContent, /bearer_token_env_var/);
@@ -211,11 +176,11 @@ test(
         assert.match($("#page-content").textContent, /尚未实现/);
       },
     );
-    await t.test(
-      "audit records persist, deletion has explicit confirmation",
+    await step(
+      "审计记录持久化，删除需要明确确认",
       async () => {
         click("[data-view=activity]");
-        await new Promise((r) => setTimeout(r, 20));
+        await wait(() => $("#page-content").textContent.includes("创建会话"));
         click("#refresh");
         await wait(() => !$("#refresh").disabled);
         assert.match($("#page-content").textContent, /创建会话/);
@@ -231,8 +196,8 @@ test(
         );
       },
     );
-    await t.test(
-      "logout clears stored auth, inventory, sessions and dialog state",
+    await step(
+      "退出清除认证、清单、会话和对话框状态",
       async () => {
         click("#logout");
         assert.ok($("#app-view").hidden);
