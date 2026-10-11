@@ -75,9 +75,9 @@
           </div>
           <form id="login-form" class="login-card">
             <span class="section-kicker">管理控制台</span>
-            <h2>连接你的工作空间</h2>
-            <p>使用服务端设置的管理员 Token 登录。</p>
-            <label for="admin-token">管理员 Token</label
+            <h2 id="login-title">连接你的工作空间</h2>
+            <p id="login-description">正在读取登录方式…</p>
+            <label id="password-label" for="admin-token">管理员 Token</label
             ><input
               id="admin-token"
               type="password"
@@ -91,6 +91,10 @@
                 type="checkbox"
               />在此标签页内保持登录</label
             >
+            <div id="setup-fields" hidden>
+              <label for="confirm-password">确认密码</label><input id="confirm-password" type="password" autocomplete="new-password" />
+              <label for="bootstrap-token">首次设置凭证</label><input id="bootstrap-token" type="password" autocomplete="off" />
+            </div>
             <p id="login-error" class="form-error" role="alert"></p>
             <button class="primary wide" type="submit">
               进入控制台 <span aria-hidden="true">→</span>
@@ -100,6 +104,15 @@
               分开设置。首次使用请在服务端配置。
             </p>
           </form>
+        </section>
+        <section id="consent-view" class="panel setup-panel" hidden aria-labelledby="consent-title">
+          <span class="section-kicker">CLIENT AUTHORIZATION</span>
+          <h1 id="consent-title">允许客户端连接？</h1>
+          <p id="consent-client"></p><p class="note">客户端名称由客户端提供，未经本站认证。请核对以下回调地址。</p>
+          <pre id="consent-redirect" class="consent-address"></pre>
+          <p>授权后，该客户端可以访问所有已配置服务器，执行命令、读写文件和管理终端会话。实际权限由 SSH 登录账户决定。</p>
+          <p class="note">授权最长有效 30 天，可随时在「MCP 接入」中撤销。</p>
+          <div class="dialog-actions"><button id="deny-consent" class="secondary">拒绝</button><button id="allow-consent" class="primary">允许连接</button></div>
         </section>
         <div id="app-view" hidden>
           <section class="page-heading">

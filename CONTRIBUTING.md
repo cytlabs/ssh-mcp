@@ -36,6 +36,7 @@ npm ci
 npm run test:ui
 npx playwright install --with-deps chromium
 npm run test:browser
+PYTHON=.venv/bin/python npm run test:oauth-browser
 ```
 
 UI 测试使用临时 SQLite 和模拟 SSH。浏览器截图保存到被 Git 忽略的 `test-results/`。

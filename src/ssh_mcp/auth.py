@@ -1,13 +1,15 @@
-"""Static bearer auth for header-capable clients; not an OAuth authorization server."""
+"""HTTP 认证与请求体大小限制。"""
 
 import hmac
 
 
 class BearerAuth:
-    def __init__(self, app, token: str, max_body: int = 2_097_152):
+    def __init__(self, app, token: str = "", max_body: int = 2_097_152, *,
+                 validator=None, authorize=None, challenge=b"Bearer"):
         self.app = app
         self.token = token.encode("ascii")
         self.max_body = max_body
+        self.validator, self.authorize, self.challenge = validator, authorize, challenge
 
     async def __call__(self, scope, receive, send):
         if scope["type"] != "http":
@@ -16,9 +18,14 @@ class BearerAuth:
         values = [value for key, value in headers if key.lower() == b"authorization"]
         supplied = values[0].split(b" ", 1) if len(values) == 1 else []
         valid = (len(supplied) == 2 and supplied[0].lower() == b"bearer"
-                 and hmac.compare_digest(supplied[1], self.token))
+                 and len(supplied[1]) <= 4096
+                 and ((bool(self.token) and hmac.compare_digest(supplied[1], self.token))
+                      or (self.validator and supplied[1].isascii()
+                          and self.validator(supplied[1].decode("ascii")))))
+        if self.authorize:
+            valid = self.authorize(scope)
         if not valid:
-            return await self.reject(send, 401, b"Unauthorized", [(b"www-authenticate", b"Bearer")])
+            return await self.reject(send, 401, b"Unauthorized", [(b"www-authenticate", self.challenge)])
         # Bound actual bytes, including chunked bodies. Never trust Content-Length alone.
         chunks, size = [], 0
         while True:

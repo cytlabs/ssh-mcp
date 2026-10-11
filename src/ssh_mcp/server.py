@@ -230,11 +230,20 @@ def create_server(config: Config) -> tuple[FastMCP, SSHManager]:
 def create_http_app(config: Config, database: Path | None = None):
     from .console import Console
     from .registry import Registry
-    token = config.token()  # Fail before starting a listener if auth is missing.
+    token = config.token() if config.auth_mode == "token" or os.environ.get(config.token_env) else ""
     admin_token = os.environ.get("SSH_MCP_ADMIN_TOKEN")
     if admin_token and (len(admin_token) < 32 or not admin_token.isascii()
                         or any(c.isspace() for c in admin_token) or admin_token == token):
         raise ConfigError("Admin token must be a separate random ASCII token of at least 32 characters")
+    identity = None
+    if config.auth_mode == "oauth":
+        from .identity import IdentityStore, auth_database
+        if database is None:
+            raise ConfigError("OAuth requires a persistent database path")
+        identity = IdentityStore(auth_database(database), config.public_url.rstrip("/") + "/mcp")
+        if not identity.owner_password() and not admin_token:
+            identity.close()
+            raise ConfigError("Set SSH_MCP_ADMIN_TOKEN for initial setup or use set-admin-password")
     registry = Registry(config, database)
     config = registry.config(config)
     mcp, manager = create_server(config)
@@ -248,8 +257,17 @@ def create_http_app(config: Config, database: Path | None = None):
                 yield
         finally:
             registry.close()
+            if identity:
+                identity.close()
 
     app.router.lifespan_context = lifespan
+    if identity:
+        from .oauth import OAuth
+        challenge = ('Bearer resource_metadata="' + config.public_url.rstrip("/")
+                     + '/.well-known/oauth-protected-resource/mcp", scope="ssh:access"').encode()
+        console = Console(BearerAuth(app, token, validator=identity.access_valid, challenge=challenge),
+                          manager, registry, None)
+        return OAuth(console, identity, admin_token)
     return Console(BearerAuth(app, token), manager, registry, admin_token)
 
 

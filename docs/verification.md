@@ -121,3 +121,20 @@ ChatGPT 所需的 OAuth 接入尚未实现，见 [Issue #2](https://github.com/c
 Bearer 客户端验收通过也不能关闭 OAuth 待办。
 源码已提交 GitHub；未发布 PyPI 安装包、正式镜像或 Release。
 首次正式发布准备见 [Issue #4](https://github.com/cytlabs/ssh-mcp/issues/4)。
+
+## 2026-10-11：OAuth 与命令返回值
+
+本轮新增原生 OAuth（发现、DCR、S256 PKCE、浏览器同意、刷新轮换与撤销），
+中文密码初始化/登录页、HttpOnly Cookie、授权管理和密码重设 CLI。
+
+- Python 后端测试增加到 56 项：原 47 项加 8 项 OAuth 安全流程测试及 1 项 OAuth→MCP→真实回环 SSH 集成测试。
+- OAuth 命令集成测试显式轮询最终状态，验证 stdout、stderr、非零退出码以及撤销后拒绝 MCP 请求。
+- 原 DOM 24 项、桌面/手机 Chromium 控制台检查通过。
+- 新 HTTPS Chromium 流程通过：首次设置、Cookie 刷新保持、显式同意、回调、OAuth Token 换取、MCP 初始化、授权撤销、手机布局、退出和重新登录。
+- Ruff、wheel 构建及静态资源校验通过。Python 3.10 的既有退出清理警告仍由 #8 跟踪。
+- 升级前公开 HTTPS MCP 实际执行低影响命令，得到 stdout、stderr、退出码 7 和 completed 状态；目标使用普通 SSH 账户。
+
+本轮浏览器使用临时自签名 HTTPS 夹具（仅测试客户端信任该证书）；生产入口仍要求有效可信证书。
+协议和浏览器自动化不替代 Codex/ChatGPT 的真实 AI 对话验收。生产首次密码设置应由管理员完成。
+
+新增 `npm run test:oauth-browser` 已在本机通过，尚未接入 GitHub Actions 的 console 作业：当前 GitHub OAuth 凭据没有修改 workflow 的权限。现有 CI 继续运行后端（包含新 OAuth 测试）、原控制台、容器与构建审计。
