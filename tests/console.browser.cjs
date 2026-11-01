@@ -49,7 +49,14 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator("#remember").check();
     await page.locator("#login-form button[type=submit]").click();
     await page.locator("#app-view").waitFor({ state: "visible" });
-    await page.locator(".overview-hero").waitFor();
+    await page.locator(".overview-stats").waitFor();
+    await page.locator("#theme-toggle").click();
+    assert.equal(await page.locator("body").getAttribute("data-theme"), "dark");
+    await page.reload();
+    await page.locator("#app-view").waitFor({ state: "visible" });
+    assert.equal(await page.locator("body").getAttribute("data-theme"), "dark");
+    await page.locator("#theme-toggle").click();
+    assert.equal(await page.locator("body").getAttribute("data-theme"), "light");
     await page.locator("[data-view=servers]").click();
     assert.equal(await page.locator(".server-row").count(), 3);
     await page.reload();
@@ -70,33 +77,25 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
       .fill("/etc/known_hosts");
     await page.getByRole("button", { name: "保存服务器" }).click();
     await page.locator("#server-dialog").waitFor({ state: "hidden" });
-    await page.locator("[data-action=test][data-id=browser-added]").click();
+    await page.locator("#server-detail [data-action=test][data-id=browser-added]").click();
     await page.locator(".badge.ok").waitFor();
     fs.mkdirSync(path.join(root, "test-results"), { recursive: true });
     await page.screenshot({
       path: path.join(root, "test-results/console-desktop.png"),
       fullPage: true,
     });
-    await page.locator("[data-action=open-session]").click();
-    await page.locator("#terminal-input").fill("echo hello");
-    await page.locator("#terminal-input").press("Enter");
-    await page.waitForFunction(() =>
-      document
-        .querySelector("#terminal-output")
-        .textContent.includes("fixture: input received"),
-    );
-    await page.locator("[data-action=close-session]").click();
-    await page.locator("#confirm-dialog button[value=confirm]").click();
-    await page.locator("#terminal-input").waitFor({ state: "hidden" });
+    await page.locator("[data-view=activity]").click();
+    await page.locator("#activity-rows").getByText("添加服务器").first().waitFor();
+    await page.locator("#activity-event").selectOption("connection");
+    await page.locator("#activity-rows").getByText("测试连接").first().waitFor();
+    await page.locator("#activity-event").selectOption("all");
+    await page.locator("#activity-rows").getByText("添加服务器").first().waitFor();
     await page.locator("[data-view=clients]").click();
     await page.locator("#client-config").waitFor();
     assert.ok(
       !(await page.locator("#client-config").textContent()).includes(admin),
     );
-    await page.locator("[data-action=client][data-id=ChatGPT]").click();
-    await page
-      .getByText("ChatGPT 的 OAuth 接入尚未实现", { exact: true })
-      .waitFor();
+    assert.equal(await page.locator("[data-action=client][data-id=ChatGPT]").count(), 0);
     await page.locator("[data-view=servers]").click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({

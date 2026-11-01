@@ -153,18 +153,15 @@ for (const startupDelay of [0, 3000]) test(
       click("[data-action=test][data-id=browser-added]");
       await wait(() => $("#server-rows").textContent.includes("可连接"));
     });
-    await step("会话创建、输入、输出和关闭", async () => {
-      click("[data-action=open-session]");
-      await wait(() => !!$("#terminal-input"));
-      $("#terminal-input").value = "echo hello";
-      submit("#terminal-form");
-      await wait(() =>
-        $("#terminal-output").textContent.includes("fixture: input received"),
-      );
-      click("[data-action=close-session]");
-      await wait(() => $("#confirm-dialog").open);
-      $("#confirm-dialog").close("confirm");
-      await wait(() => !$("#terminal-input"));
+    await step("操作记录支持按类别筛选", async () => {
+      click("[data-view=activity]");
+      await wait(() => $("#activity-rows").textContent.includes("添加服务器"));
+      $("#activity-event").value = "connection";
+      $("#activity-event").dispatchEvent(new w.Event("change"));
+      await wait(() => $("#activity-rows").textContent.includes("测试连接"));
+      $("#activity-event").value = "all";
+      $("#activity-event").dispatchEvent(new w.Event("change"));
+      await wait(() => $("#activity-rows").textContent.includes("添加服务器"));
     });
     await step(
       "客户端配置包含入口且不含管理员凭据",
@@ -174,18 +171,17 @@ for (const startupDelay of [0, 3000]) test(
         assert.ok(!$("#client-config").textContent.includes(admin));
         click("[data-action=client][data-id=Cursor]");
         assert.match($("#client-config").textContent, /env:SSH_MCP_TOKEN/);
-        click("[data-action=client][data-id=ChatGPT]");
-        assert.match($("#page-content").textContent, /尚未实现/);
+        assert.equal($("#page-content").textContent.includes(admin), false);
       },
     );
     await step(
       "审计记录持久化，删除需要明确确认",
       async () => {
         click("[data-view=activity]");
-        await wait(() => $("#page-content").textContent.includes("创建会话"));
+        await wait(() => $("#page-content").textContent.includes("添加服务器"));
         click("#refresh");
         await wait(() => !$("#refresh").disabled);
-        assert.match($("#page-content").textContent, /创建会话/);
+        assert.match($("#page-content").textContent, /添加服务器/);
         assert.ok(!$("#page-content").textContent.includes("echo hello"));
         click("[data-view=servers]");
         click("[data-action=select][data-id=browser-added]");

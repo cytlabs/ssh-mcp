@@ -13,6 +13,7 @@ import uuid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import urlsplit
 
 from ssh_mcp.config import parse_config
 from ssh_mcp.console import Console
@@ -98,7 +99,8 @@ def main():
                     async def send(message, collected=messages):
                         collected.append(message)
 
-                    scope = {"type": "http", "scheme": "http", "path": request["path"],
+                    scope = {"type": "http", "scheme": "http", "path": urlsplit(request["path"]).path,
+                             "query_string": urlsplit(request["path"]).query.encode(),
                              "method": request.get("method", "GET"),
                              "headers": [(b"host", b"localhost:8765"),
                                          *[(k.lower().encode(), v.encode()) for k, v in request.get("headers", {}).items()]]}
@@ -116,7 +118,8 @@ def main():
 
             def handle_request(self):
                 raw = self.rfile.read(min(int(self.headers.get("Content-Length", "0")), 70000))
-                scope = {"type": "http", "scheme": "http", "path": self.path.split("?")[0],
+                scope = {"type": "http", "scheme": "http", "path": urlsplit(self.path).path,
+                         "query_string": urlsplit(self.path).query.encode(),
                          "method": self.command, "headers": [(k.lower().encode(), v.encode())
                                                              for k, v in self.headers.items()]}
                 messages = []

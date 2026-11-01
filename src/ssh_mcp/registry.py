@@ -105,5 +105,47 @@ class Registry:
     def history(self) -> list[dict]:
         return [dict(row) for row in self.db.execute("SELECT * FROM audit ORDER BY id DESC LIMIT 50")]
 
+
+    def search_history(self, *, page=1, size=10, search="", event="all",
+                       outcome="all", start="", end="") -> dict:
+        """只查询已有的管理事件元数据，不读取命令正文或凭据。"""
+        clauses = []
+        params = []
+        if search:
+            labels = {
+                "server.create": "添加服务器", "server.update": "编辑服务器",
+                "server.delete": "移除服务器", "connection.test": "测试连接",
+                "session.create": "创建会话", "session.close": "关闭会话",
+                "session.input": "发送会话输入",
+            }
+            aliases = [key for key, name in labels.items() if search in name]
+            sql = "(instr(lower(event),lower(?)) > 0 OR instr(lower(target),lower(?)) > 0"
+            params.extend([search, search])
+            if aliases:
+                sql += " OR event IN (" + ",".join("?" for _ in aliases) + ")"
+                params.extend(aliases)
+            clauses.append(sql + ")")
+        if event != "all":
+            clauses.append("event LIKE ?")
+            params.append(event + ".%")
+        if outcome != "all":
+            clauses.append("outcome = ?")
+            params.append(outcome)
+        if start:
+            clauses.append("substr(timestamp, 1, 10) >= ?")
+            params.append(start)
+        if end:
+            clauses.append("substr(timestamp, 1, 10) <= ?")
+            params.append(end)
+        where = " WHERE " + " AND ".join(clauses) if clauses else ""
+        total = self.db.execute("SELECT COUNT(*) FROM audit" + where, params).fetchone()[0]
+        rows = self.db.execute(
+            "SELECT id,timestamp,event,target,outcome FROM audit" + where
+            + " ORDER BY id DESC LIMIT ? OFFSET ?",
+            [*params, size, (page - 1) * size],
+        ).fetchall()
+        return {"page": page, "size": size, "total": total,
+                "items": [dict(row) for row in rows]}
+
     def close(self) -> None:
         self.db.close()

@@ -7,7 +7,8 @@ import contextlib
 import json
 import time
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
+from datetime import date
 
 from . import __version__
 from .auth import BearerAuth
@@ -80,11 +81,12 @@ class Console:
         if scope["method"] != "GET":
             return await self.respond(send, 405, {"error": "Method not allowed"})
         names = {"/": "index.html", "/console": "index.html", "/console/": "index.html",
-                 "/console/app.js": "app.js", "/console/style.css": "style.css"}
+                 "/console/app.js": "app.js", "/console/style.css": "style.css",
+                 "/console/logo.svg": "logo.svg"}
         name = names.get(path)
         if not name:
             return await self.respond(send, 404, {"error": "Not found"})
-        content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css"}[name.split(".")[-1]]
+        content_type = {"html": "text/html", "js": "text/javascript", "css": "text/css", "svg": "image/svg+xml"}[name.split(".")[-1]]
         await self.respond(send, 200, (ASSETS / name).read_bytes(), content_type)
 
     async def api(self, scope, receive, send):
@@ -100,7 +102,7 @@ class Console:
             body = json.loads(raw) if raw else {}
             if not isinstance(body, dict):
                 raise InputError("请求内容必须为对象")
-            result = await self.dispatch(scope["method"], scope["path"], body)
+            result = await self.dispatch(scope["method"], scope["path"], body, scope.get("query_string", b""))
             await self.respond(send, 200, result)
         except Conflict:
             await self.respond(send, 409, {"error": "配置已变化、ID 重复或仍有运行中的会话。请刷新并检查后重试。"})
@@ -110,13 +112,35 @@ class Console:
             # Never serialize arbitrary SSH/SQLite exceptions or credential paths.
             await self.respond(send, 502, {"error": "操作未完成。请检查服务端配置、文件权限或 SSH 连接。"})
 
-    async def dispatch(self, method: str, path: str, body: dict) -> dict:
+    async def dispatch(self, method: str, path: str, body: dict, query: bytes = b"") -> dict:
         parts = path.strip("/").split("/")
         if method == "GET" and path == "/admin/state":
             return {**self.registry.snapshot(), "version": __version__,
                     "mcp_url": self.manager.config.public_url.rstrip("/") + "/mcp",
                     "auth_mode": self.manager.config.auth_mode,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
+        if method == "GET" and path == "/admin/activity":
+            options = parse_qs(query.decode("utf-8"), keep_blank_values=True, max_num_fields=12)
+            if any(len(values) != 1 for values in options.values()):
+                raise InputError("Duplicate query parameters")
+            def option(key, default=""):
+                return options.get(key, [default])[0]
+            page = int(option("page", "1"))
+            size = int(option("size", "10"))
+            search = option("search").strip()
+            event = option("event", "all")
+            outcome = option("outcome", "all")
+            start, end = option("start"), option("end")
+            if not (1 <= page <= 10000 and size in (10, 20, 50) and len(search) <= 120):
+                raise InputError("Invalid pagination or search")
+            if event not in ("all", "server", "connection", "session") or outcome not in ("all", "ok", "failed"):
+                raise InputError("Invalid activity filters")
+            if (start and date.fromisoformat(start).isoformat() != start) or (end and date.fromisoformat(end).isoformat() != end):
+                raise InputError("Invalid dates")
+            if start and end and start > end:
+                raise InputError("Invalid date range")
+            return self.registry.search_history(page=page, size=size, search=search,
+                                                event=event, outcome=outcome, start=start, end=end)
         if method == "POST" and path == "/admin/servers":
             data = body["server"]
             self.registry.change(body["revision"], data["id"], data, create=True)

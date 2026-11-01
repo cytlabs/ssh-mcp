@@ -1,252 +1,120 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="dark" />
-    <title>Portlane · AI 远程连接</title>
-    <link rel="stylesheet" href="/console/style.css" />
-    <script defer src="/console/app.js"></script>
-  </head>
-  <body>
-    <a class="skip-link" href="#main">跳转到主要内容</a>
-    <aside class="sidebar">
-      <a class="brand" href="/console"
-        ><span class="brand-mark" aria-hidden="true">›_</span
-        ><span>Portlane<small>AI REMOTE ACCESS</small></span></a
-      >
-      <div class="workspace-label">
-        <span class="workspace-icon">S</span
-        ><span>我的工作空间<small>Self-hosted workspace</small></span>
-      </div>
-      <p class="nav-caption">控制台</p>
-      <nav aria-label="主导航">
-        <button data-view="dashboard" aria-current="page"><span aria-hidden="true">◈</span>概览</button>
-        <button data-view="servers">
-          <span aria-hidden="true">▤</span>服务器<span
-            id="nav-count"
-            class="nav-count"
-            >—</span
-          >
-        </button>
-        <button data-view="sessions">
-          <span aria-hidden="true">›_</span>终端会话
-        </button>
-        <button data-view="clients">
-          <span aria-hidden="true">⇄</span>MCP 接入
-        </button>
-        <button data-view="activity">
-          <span aria-hidden="true">◷</span>操作记录
-        </button>
-      </nav>
-      <div class="sidebar-bottom">
-        <span class="protocol-dot"></span>连接与智能，彼此独立
-        <p>通用 SSH 能力 · MIT 开源</p>
-        <span id="version" class="mono">开发预览</span>
-      </div>
-    </aside>
-    <div class="workspace">
-      <header class="topbar">
-        <div>
-          控制台 <span>/</span> <strong id="breadcrumb">概览</strong>
-        </div>
-        <div class="account">
-          <span id="connection-label">尚未登录</span
-          ><button id="logout" class="text-button" hidden>退出登录</button
-          ><span class="avatar" aria-hidden="true">S</span>
-        </div>
-      </header>
-      <main id="main" tabindex="-1">
-        <section id="login-view" class="login-view">
-          <div class="login-copy">
-            <div class="eyebrow">YOUR SERVERS. CONNECTED.</div>
-            <h1>让 AI 连接服务器。<br /><span>让你掌握每一次连接。</span></h1>
-            <p>
-              集中管理 SSH 服务器，为你的 AI 客户端提供<br
-                class="desktop-break"
-              />可复用的终端与文件操作能力。
-            </p>
-            <div
-              class="connection-map"
-              aria-label="AI 客户端通过 SSH MCP 连接服务器"
-            >
-              <span>AI 客户端</span><i></i><b>›_ SSH MCP</b><i></i
-              ><span>你的服务器</span>
-            </div>
-          </div>
-          <form id="login-form" class="login-card">
-            <span class="section-kicker">管理控制台</span>
-            <h2 id="login-title">连接你的工作空间</h2>
-            <p id="login-description">正在读取登录方式…</p>
-            <div id="login-fields">
-            <label id="username-label" hidden>用户名<input id="username" autocomplete="username" maxlength="128" placeholder="例如 admin" /></label>
-            <label id="password-label" for="admin-token">管理员 Token</label
-            ><input
-              id="admin-token"
-              type="password"
-              autocomplete="off"
-              required
-              minlength="32"
-              placeholder="输入 SSH_MCP_ADMIN_TOKEN"
-            /><label class="checkbox-label"
-              ><input
-                id="remember"
-                type="checkbox"
-              />在此标签页内保持登录</label
-            >
-            <div id="setup-fields" hidden>
-              <label for="confirm-password">确认密码</label><input id="confirm-password" type="password" autocomplete="new-password" />
-            </div>
-            </div>
-            <p id="login-error" class="form-error" role="alert"></p>
-            <button class="primary wide" type="submit">
-              进入控制台 <span aria-hidden="true">→</span>
-            </button>
-            <p class="login-help">
-              管理员 Token 与 AI 客户端的 MCP Token
-              分开设置。首次使用请在服务端配置。
-            </p>
-          </form>
-        </section>
-        <section id="consent-view" class="panel setup-panel" hidden aria-labelledby="consent-title">
-          <span class="section-kicker">CLIENT AUTHORIZATION</span>
-          <h1 id="consent-title">允许客户端连接？</h1>
-          <p id="consent-client"></p><p class="note">客户端名称由客户端提供，未经本站认证。请核对以下回调地址。</p>
-          <pre id="consent-redirect" class="consent-address"></pre>
-          <p>授权后，该客户端可以访问所有已配置服务器，执行命令、读写文件和管理终端会话。实际权限由 SSH 登录账户决定。</p>
-          <p class="note">授权最长有效 30 天，可随时在「MCP 接入」中撤销。</p>
-          <div class="dialog-actions"><button id="deny-consent" class="secondary">拒绝</button><button id="allow-consent" class="primary">允许连接</button></div>
-        </section>
-        <div id="app-view" hidden>
-          <section class="page-heading">
-            <div>
-              <div class="eyebrow" id="page-kicker">SERVER INVENTORY</div>
-              <h1 id="page-title">服务器</h1>
-              <p id="page-description">
-                管理连接目标，让 AI 在合适的服务器上工作。
-              </p>
-            </div>
-            <div class="heading-actions">
-              <button id="refresh" class="secondary">↻ 刷新</button
-              ><button id="add-server" class="primary">＋ 添加服务器</button>
-            </div>
-          </section>
-          <div id="page-content"></div>
-        </div>
-        <noscript
-          >此控制台需要启用 JavaScript。你也可以通过服务端 CLI
-          管理配置。</noscript
-        >
-      </main>
-      <footer>
-        Portlane <span>AI 执行 · 控制台观察。</span
-        ><span class="footer-right">独立部署 · SQLite</span>
-      </footer>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>Portlane</title>
+  <link rel="icon" type="image/svg+xml" href="/console/logo.svg">
+  <link rel="stylesheet" href="/console/style.css">
+  <script defer src="/console/app.js"></script>
+</head>
+<body data-theme="light">
+<a class="skip-link" href="#main">跳转到内容</a>
+<aside class="sidebar">
+  <a href="/console" class="brand" aria-label="Portlane 首页">
+    <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
+      <rect x="2" y="2" width="44" height="44" rx="13" fill="#6169d5"/>
+      <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="21.5" cy="31" r="3" fill="#badcff"/>
+    </svg>
+    <span>Portlane</span>
+  </a>
+  <nav aria-label="主导航">
+    <button data-view="dashboard" aria-current="page"><span class="nav-icon" aria-hidden="true">⌂</span>概览</button>
+    <button data-view="servers"><span class="nav-icon" aria-hidden="true">▤</span>服务器<span id="nav-count" class="nav-count">—</span></button>
+    <button data-view="activity"><span class="nav-icon" aria-hidden="true">◷</span>操作记录</button>
+    <button data-view="clients"><span class="nav-icon" aria-hidden="true">⇄</span>MCP 接入</button>
+  </nav>
+  <div class="sidebar-bottom"><span id="version">v0.1.0</span></div>
+</aside>
+<div class="workspace">
+  <header class="topbar">
+    <strong id="breadcrumb">概览</strong>
+    <div class="account">
+      <span id="connection-label" hidden></span>
+      <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">☾</button>
+      <button id="logout" class="text-button" type="button" hidden>退出登录</button>
     </div>
-    <div id="toast" class="toast" role="status" hidden></div>
-    <dialog id="server-dialog" aria-labelledby="server-dialog-title">
-      <form id="server-form">
-        <div class="dialog-heading">
-          <div>
-            <span class="section-kicker">SSH CONNECTION</span>
-            <h2 id="server-dialog-title">添加服务器</h2>
-          </div>
-          <button
-            type="button"
-            class="icon-button"
-            data-close="server-dialog"
-            aria-label="关闭"
-          >
-            ×
-          </button>
+  </header>
+  <main id="main" tabindex="-1">
+    <section id="login-view" class="login-view">
+      <button id="login-theme-toggle" class="icon-button login-theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">☾</button>
+      <div class="login-brand">
+        <svg class="logo-mark large" viewBox="0 0 48 48" aria-hidden="true">
+          <rect x="2" y="2" width="44" height="44" rx="13" fill="#6169d5"/>
+          <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="21.5" cy="31" r="3" fill="#badcff"/>
+        </svg>
+        <strong>Portlane</strong>
+      </div>
+      <form id="login-form" class="login-card">
+        <h1 id="login-title">登录 Portlane</h1>
+        <p id="login-description">使用管理员账号登录。</p>
+        <div id="login-fields">
+          <label id="username-label" hidden>用户名<input id="username" autocomplete="username" maxlength="128" placeholder="请输入用户名"></label>
+          <label id="password-label" for="admin-token">密码</label>
+          <input id="admin-token" type="password" autocomplete="off" required minlength="32" placeholder="请输入密码">
+          <label class="checkbox-label"><input id="remember" type="checkbox">在此标签页保持登录</label>
+          <div id="setup-fields" hidden><label for="confirm-password">确认密码</label><input id="confirm-password" type="password" autocomplete="new-password"></div>
         </div>
-        <p class="muted">
-          配置连接信息。凭据由服务端保管，AI 只会看到服务器名称与地址。
-        </p>
-        <div class="form-grid">
-          <label
-            >服务器 ID<input
-              name="id"
-              required
-              pattern="[a-zA-Z0-9_-]{1,64}"
-              maxlength="64"
-              placeholder="例如 staging" /></label
-          ><label
-            >备注<input
-              name="description"
-              maxlength="512"
-              placeholder="例如：产品测试环境" /></label
-          ><label
-            >主机地址<input
-              name="host"
-              required
-              maxlength="255"
-              placeholder="IP 或主机名" /></label
-          ><label
-            >SSH 端口<input
-              name="port"
-              type="number"
-              min="1"
-              max="65535"
-              value="22"
-              required /></label
-          ><label
-            >登录用户名<input
-              name="username"
-              required
-              maxlength="128"
-              placeholder="例如 ops" /></label
-          ><label
-            >认证方式<select name="auth">
-              <option value="private_key">SSH 私钥</option>
-              <option value="password_env">密码环境变量</option>
-            </select></label
-          >
-        </div>
-        <label id="credential-label"
-          >服务端私钥路径<input
-            name="credential"
-            required
-            placeholder="/etc/ssh-mcp/secrets/id_ed25519"
-        /></label>
-        <label id="passphrase-label"
-          >私钥口令环境变量 <span class="optional">选填</span
-          ><input name="passphrase_env" placeholder="例如 SSH_KEY_PASSPHRASE"
-        /></label>
-        <label
-          >已核验的主机公钥文件<input
-            name="known_hosts"
-            required
-            placeholder="/etc/ssh-mcp/secrets/known_hosts"
-        /></label>
-        <div class="form-note">
-          <span aria-hidden="true">◇</span>
-          <p>
-            填写服务端已有的文件路径或环境变量名称，不要粘贴密码或私钥内容。主机公钥需由管理员预先核验。
-          </p>
-        </div>
-        <p class="form-error" id="server-error" role="alert"></p>
-        <div class="dialog-actions">
-          <button type="button" class="secondary" data-close="server-dialog">
-            取消</button
-          ><button type="submit" class="primary">保存服务器</button>
-        </div>
+        <p id="login-error" class="form-error" role="alert"></p>
+        <button class="primary wide" type="submit">登录</button>
+        <p class="login-help"></p>
       </form>
-    </dialog>
-    <dialog id="confirm-dialog" aria-labelledby="confirm-title">
-      <form method="dialog">
-        <div class="dialog-heading">
-          <h2 id="confirm-title">确认操作</h2>
-          <button class="icon-button" value="cancel" aria-label="关闭">
-            ×
-          </button>
+    </section>
+    <section id="consent-view" class="panel setup-panel" hidden aria-labelledby="consent-title">
+      <h1 id="consent-title">允许客户端连接？</h1>
+      <p id="consent-client"></p>
+      <p class="note">请核对客户端提供的回调地址。</p>
+      <pre id="consent-redirect" class="consent-address"></pre>
+      <p>授权后，此客户端可通过 SSH 账户现有权限访问全部已配置服务器，执行命令和操作文件。</p>
+      <p class="note">可在「MCP 接入」撤销授权；撤销不会终止已运行的远程进程。</p>
+      <div class="dialog-actions">
+        <button id="deny-consent" class="secondary" type="button">拒绝</button>
+        <button id="allow-consent" class="primary" type="button">允许连接</button>
+      </div>
+    </section>
+    <div id="app-view" hidden>
+      <section class="page-heading">
+        <div><span id="page-kicker" hidden></span><h1 id="page-title">概览</h1><p id="page-description"></p></div>
+        <div class="heading-actions">
+          <button id="refresh" class="secondary" type="button">↻ 刷新</button>
+          <button id="add-server" class="primary" type="button">＋ 添加服务器</button>
         </div>
-        <p id="confirm-description"></p>
-        <div class="dialog-actions">
-          <button value="cancel" class="secondary">取消</button
-          ><button value="confirm" class="danger">确认</button>
-        </div>
-      </form>
-    </dialog>
-  </body>
+      </section>
+      <div id="page-content"></div>
+    </div>
+    <noscript>请启用 JavaScript 使用控制台。</noscript>
+  </main>
+  <footer><span id="footer-version">Portlane</span></footer>
+</div>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="server-dialog" aria-labelledby="server-dialog-title">
+  <form id="server-form">
+    <div class="dialog-heading"><h2 id="server-dialog-title">添加服务器</h2><button type="button" class="icon-button" data-close="server-dialog" aria-label="关闭">×</button></div>
+    <div class="form-grid">
+      <label>服务器 ID<input name="id" required pattern="[a-zA-Z0-9_-]{1,64}" maxlength="64" placeholder="例如 dev-web"></label>
+      <label>备注<input name="description" maxlength="512" placeholder="可选"></label>
+      <label>主机地址<input name="host" required maxlength="255" placeholder="IP 或域名"></label>
+      <label>端口<input name="port" type="number" min="1" max="65535" value="22" required></label>
+      <label>登录用户<input name="username" required maxlength="128" placeholder="例如 deploy"></label>
+      <label>认证方式<select name="auth"><option value="private_key">SSH 私钥</option><option value="password_env">密码环境变量</option></select></label>
+    </div>
+    <label id="credential-label">服务端私钥路径<input name="credential" required placeholder="/etc/ssh-mcp/secrets/id_ed25519"></label>
+    <label id="passphrase-label">私钥口令环境变量 <span class="optional">选填</span><input name="passphrase_env" placeholder="例如 SSH_KEY_PASSPHRASE"></label>
+    <label>已核验的主机公钥文件<input name="known_hosts" required placeholder="/etc/ssh-mcp/secrets/known_hosts"></label>
+    <p class="form-note">这里只填写服务端已有文件的路径或环境变量名称，不要粘贴密码和私钥内容。主机公钥需先核验。</p>
+    <p class="form-error" id="server-error" role="alert"></p>
+    <div class="dialog-actions"><button type="button" class="secondary" data-close="server-dialog">取消</button><button type="submit" class="primary">保存服务器</button></div>
+  </form>
+</dialog>
+<dialog id="confirm-dialog" aria-labelledby="confirm-title">
+  <form method="dialog">
+    <div class="dialog-heading"><h2 id="confirm-title">确认操作</h2><button class="icon-button" value="cancel" aria-label="关闭">×</button></div>
+    <p id="confirm-description"></p>
+    <div class="dialog-actions"><button value="cancel" class="secondary">取消</button><button value="confirm" class="danger">确认</button></div>
+  </form>
+</dialog>
+</body>
 </html>

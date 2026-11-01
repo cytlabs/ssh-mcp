@@ -1,5 +1,7 @@
 # 安全说明与漏洞反馈
 
+产品名称为 Portlane；底层 Python 包、CLI 与协议仍沿用 SSH MCP 命名。网页主题和 Logo 不改变认证边界。
+
 ## 信任模型
 
 SSH MCP 面向一个操作者及其可信客户端。持有 MCP Token 即可使用所有已配置的 SSH 账户执行任意命令。
@@ -38,7 +40,7 @@ MCP 服务账户需要读取配置的 SSH 凭据；目标账户应无法读取 M
 
 SQLite 保存服务器元数据、凭据引用和有限条数的管理记录，不保存 SSH 密码或私钥正文。
 凭据引用只供管理员接口使用，不通过 MCP 发现接口返回。数据库应按私人基础设施信息保护。
-可选的标签页登录状态使用 `sessionStorage`，不是 HttpOnly Cookie 或多用户会话系统。
+旧 Token 模式可选在标签页的 `sessionStorage` 保持登录；OAuth 模式使用 HttpOnly Cookie。这两种模式都不是多用户权限隔离。
 页面使用严格 CSP，将远程内容显示为文本。已执行的浏览器检查范围见 [验证记录](docs/verification.md)。
 
 连接和文件操作有截止时间，命令有超时，Shell 有空闲回收。

@@ -14,27 +14,22 @@ const titles = {
   dashboard: [
     "概览",
     "SYSTEM OVERVIEW",
-    "查看 MCP 连接、远程服务器和会话状态。AI 任务仍在客户端执行。",
+    "查看 SSH 服务器和连接概况。",
   ],
   servers: [
     "服务器",
     "SERVER INVENTORY",
-    "管理连接目标，让 AI 在合适的服务器上工作。",
+    "搜索、维护并检测服务器连接。",
   ],
-  sessions: [
-    "终端会话",
-    "LIVE SESSIONS",
-    "查看 AI 和控制台的会话，继续操作或释放连接。",
-  ],
-  clients: [
+clients: [
     "MCP 接入",
     "CONNECT YOUR CLIENT",
-    "配置一次，让你的 AI 客户端连接这些服务器。",
+    "配置 AI 客户端的 MCP 访问。",
   ],
   activity: [
     "操作记录",
     "WORKSPACE ACTIVITY",
-    "查看最近的管理操作。记录不包含命令正文和凭据。",
+    "搜索与筛选管理操作记录。",
   ],
 };
 let setupToken = new URLSearchParams(location.hash.slice(1)).get("setup") || "";
@@ -50,6 +45,9 @@ let token = "",
   selectedSession = null;
 let search = "",
   authFilter = "all",
+  serverStatus = "all", serverPage = 1, serverSize = 10,
+  activityPage = 1, activitySize = 10, activitySearch = "",
+  activityEvent = "all", activityOutcome = "all", activityFrom = "", activityTo = "",
   client = "Codex",
   editId = null,
   editRevision = null;
@@ -157,13 +155,14 @@ function logout() {
   $("#app-view").hidden = true;
   $("#logout").hidden = true;
   $("#connection-label").textContent = "尚未登录";
+  document.body.classList.remove("authenticated");
   $("#nav-count").textContent = "—";
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
 }
 async function refresh(renderPage = true) {
   state = await api("/state");
   if (!state.servers.some((s) => s.id === selected))
-    selected = state.servers[0]?.id || null;
+    selected = null;
   if (!state.sessions.some((s) => s.session_id === selectedSession))
     selectedSession = state.sessions[0]?.session_id || null;
   $("#nav-count").textContent = state.servers.length;
@@ -185,6 +184,7 @@ async function login(value, remember = false) {
   }
   $("#login-view").hidden = true;
   $("#app-view").hidden = false;
+  document.body.classList.add("authenticated");
   $("#logout").hidden = false;
   $("#connection-label").textContent = "管理员已连接";
   render();
@@ -230,107 +230,107 @@ function render() {
   ({
     dashboard: renderDashboard,
     servers: renderServers,
-    sessions: renderSessions,
     clients: renderClients,
     activity: renderActivity,
   })[view]();
 }
 function renderDashboard() {
-  const servers = state.servers || [];
-  const sessions = state.sessions || [];
-  const running = sessions.filter((s) => s.status === "running");
-  const recent = (state.activity || []).slice(0, 5);
-  const summary = (name, value, note, symbol) =>
-    `<div class="overview-stat"><span class="overview-stat-icon" aria-hidden="true">${symbol}</span><strong>${value}</strong><span>${name}</span><small>${note}</small></div>`;
+  const servers = state.servers || [], recent = (state.activity || []).slice(0, 6);
+  const running = (state.sessions || []).filter(x => x.status === "running").length;
+  const stat = (label, val, note, symbol) =>
+    '<div class="overview-stat"><span class="overview-stat-icon">' + symbol + '</span><span>' + label +
+    '</span><strong>' + val + '</strong><small>' + note + '</small></div>';
   $("#page-content").innerHTML = `
-    <section class="overview-hero">
-      <span class="overview-kicker"><span class="status-dot"></span>REMOTE ACCESS GATEWAY</span>
-      <h2>让 AI 安全连接你的服务器。</h2>
-      <p>通过 MCP 向可信 AI 客户端提供 SSH 能力。这里负责连接与观察，不在网页里执行 AI 对话。</p>
-      <button class="secondary" data-view-link="clients">查看 MCP 接入配置 <span aria-hidden="true">↗</span></button>
-    </section>
-    <section class="overview-stats" aria-label="连接概况">
-      ${summary("已配置服务器", servers.length, "不代表连接已验证", "▤")}
-      ${summary("运行中会话", running.length, "当前服务实例", "⌁")}
-      ${summary("历史操作", (state.activity || []).length, "最近保留记录", "◷")}
-    </section>
+    <div class="overview-stats">
+      ${stat("服务器", servers.length, "已配置的服务器", "▤")}
+      ${stat("活跃会话", running, "当前服务实例", "⇄")}
+      ${stat("最近记录", (state.activity || []).length, "最多显示最近 50 条", "◷")}
+    </div>
     <div class="overview-columns">
-      <section class="overview-section">
-        <div class="overview-heading"><h2>远程服务器</h2><button class="text-link" data-view-link="servers">管理服务器 ↗</button></div>
-        <div class="overview-hosts">
-          ${servers.length ? servers.slice(0, 6).map(s => {
-            const probe = probes.get(s.id);
-            return `<div class="overview-host"><span class="overview-host-icon">▤</span><span><strong>${escapeHTML(s.id)}</strong><small>${escapeHTML(s.host)}:${s.port}</small></span>${badge(probe?.type || "", probe?.text || "未检测")}</div>`;
-          }).join("") : '<div class="overview-empty">尚未配置服务器。请先添加 SSH 连接。</div>'}
-        </div>
-      </section>
-      <section class="overview-section">
-        <div class="overview-heading"><h2>最近活动</h2><button class="text-link" data-view-link="activity">查看记录 ↗</button></div>
-        <div class="overview-events">
-          ${recent.length ? recent.map(a => `<div class="overview-event"><span class="event-bullet"></span><div><strong>${escapeHTML(a.action || a.event || a.type || "管理操作")}</strong><small>${escapeHTML(a.server_id || a.target || a.detail || "")}</small></div><time>${escapeHTML(String(a.created_at || a.timestamp || ""))}</time></div>`).join("") : '<div class="overview-empty">暂无管理活动记录。</div>'}
-        </div>
-        <div class="overview-access"><span>⌘</span><div><strong>MCP 客户端接入</strong><p>复制连接配置到 Codex、Claude Code 或 Cursor。</p></div><button class="text-link" data-view-link="clients">查看 ↗</button></div>
-      </section>
-    </div>`;
+      <section class="overview-section"><div class="overview-heading"><h2>服务器</h2><button class="text-link" data-view-link="servers">查看全部 →</button></div>
+        <div class="overview-hosts">${servers.length ? servers.slice(0,6).map(x => {
+          const p = probes.get(x.id);
+          return '<div class="overview-host"><span class="overview-host-icon">▤</span><span><strong>' +
+            escapeHTML(x.id) + '</strong><small>' + escapeHTML(x.host) + ':' + x.port +
+            '</small></span>' + (p ? badge(p.type,p.text) : badge("","未检测")) + '</div>';
+        }).join("") : '<div class="overview-empty">暂无服务器。</div>'}</div></section>
+      <section class="overview-section"><div class="overview-heading"><h2>最近操作</h2><button class="text-link" data-view-link="activity">查看全部 →</button></div>
+        <div class="overview-events">${recent.length ? recent.map(x => '<div class="overview-event"><span class="event-bullet"></span><div><strong>' +
+          escapeHTML(activityLabels[x.event] || x.event) + '</strong><small>' + escapeHTML(x.target) +
+          '</small></div><time>' + escapeHTML(formatTime(x.timestamp)) + '</time></div>').join("") : '<div class="overview-empty">暂无操作记录。</div>'}</div></section>
+    </div>
+    <div class="overview-access"><span>⇄</span><div><strong>MCP 接入</strong><p>连接 Codex、Claude Code、Cursor 等客户端。</p></div><button class="text-link" data-view-link="clients">查看配置 →</button></div>`;
 }
 function renderServers() {
-  const running = state.sessions.filter((s) => s.status === "running").length;
-  $("#page-content").innerHTML =
-    `<div class="route-strip"><span>AI 客户端</span><span class="route-line"></span><b>›_ SSH MCP</b><span class="route-line"></span><span>${state.servers.length} 台服务器</span><span class="route-meta">${running} ACTIVE SESSIONS · SSH / SFTP</span></div>
-    <div class="content-split"><section class="panel"><div class="panel-title"><h2>全部服务器</h2><small>${String(state.servers.length).padStart(2, "0")} SERVERS</small></div>
-    <div class="toolbar"><label class="search" aria-label="搜索服务器"><span aria-hidden="true">⌕</span><input id="server-search" type="search" placeholder="搜索名称、地址或备注" value="${escapeHTML(search)}"></label><select id="auth-filter" aria-label="筛选认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select></div><div id="server-rows"></div><div class="table-footer"><span>凭据保留在服务端</span><span>SQLite · 持久保存</span></div></section><aside><div class="panel" id="server-detail"></div><div class="help-card"><strong>把连接交给 MCP</strong>AI 通过服务器 ID 选择目标，使用通用 Shell 自主操作。实际权限由 SSH 登录账户决定。</div></aside></div>`;
+  $("#page-content").innerHTML = `
+    <section class="panel"><div class="toolbar">
+      <label class="search"><span>⌕</span><input id="server-search" type="search" aria-label="搜索服务器" value="${escapeHTML(search)}" placeholder="搜索名称、地址或备注"></label>
+      <select id="auth-filter" aria-label="认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select>
+      <select id="status-filter" aria-label="连接测试状态"><option value="all">全部状态</option><option value="ok">可连接</option><option value="failed">连接失败</option><option value="untested">未检测</option></select>
+    </div><div id="server-rows"></div></section><section class="panel" id="server-detail" hidden></section>`;
   $("#auth-filter").value = authFilter;
-  $("#server-search").addEventListener("input", (event) => {
-    search = event.target.value;
-    renderServerRows();
-  });
-  $("#auth-filter").addEventListener("change", (event) => {
-    authFilter = event.target.value;
-    renderServerRows();
-  });
-  renderServerRows();
-  renderDetail();
+  $("#status-filter").value = serverStatus;
+  $("#server-search").addEventListener("input", e => { search = e.target.value; serverPage = 1; renderServerRows(); });
+  $("#auth-filter").addEventListener("change", e => { authFilter = e.target.value; serverPage = 1; renderServerRows(); });
+  $("#status-filter").addEventListener("change", e => { serverStatus = e.target.value; serverPage = 1; renderServerRows(); });
+  renderServerRows(); renderDetail();
 }
 function renderServerRows() {
-  const filtered = state.servers.filter(
-    (s) =>
-      `${s.id} ${s.host} ${s.description}`
-        .toLowerCase()
-        .includes(search.toLowerCase()) &&
-      (authFilter === "all" ||
-        (authFilter === "key" ? !!s.private_key : !!s.password_env)),
-  );
+  const term = search.trim().toLowerCase();
+  const filtered = state.servers.filter(x => {
+    const p = probes.get(x.id), status = p?.type === "ok" ? "ok" : p?.type === "failed" ? "failed" : "untested";
+    return [x.id,x.host,x.description,x.username].some(v => String(v || "").toLowerCase().includes(term))
+      && (authFilter === "all" || (authFilter === "key" ? !!x.private_key : !!x.password_env))
+      && (serverStatus === "all" || serverStatus === status);
+  });
+  const count = filtered.length, pages = Math.max(1,Math.ceil(count/serverSize));
+  serverPage = Math.min(serverPage,pages);
+  const rows = filtered.slice((serverPage-1)*serverSize, serverPage*serverSize);
   if (!state.servers.length) {
-    $("#server-rows").innerHTML =
-      `<div class="empty"><span class="empty-symbol">▤</span><h3>添加第一台服务器</h3><p>配置 SSH 连接后，你的 AI 客户端就能发现它。</p><button class="primary" data-action="add">＋ 添加服务器</button></div>`;
+    $("#server-rows").innerHTML = '<div class="empty"><h3>暂无服务器</h3><p>添加一台 SSH 服务器开始使用。</p><button class="primary" data-action="add">＋ 添加服务器</button></div>';
     return;
   }
-  if (!filtered.length) {
-    $("#server-rows").innerHTML =
-      `<div class="empty"><h3>没有匹配的服务器</h3><p>试试其他关键词，或清除筛选条件。</p><button class="secondary" data-action="clear-search">清除筛选</button></div>`;
-    return;
-  }
-  $("#server-rows").innerHTML =
-    `<div class="table-wrap"><table><thead><tr><th>服务器</th><th>连接地址</th><th>连接状态</th><th>操作</th></tr></thead><tbody>${filtered.map((s) => `<tr class="server-row ${selected === s.id ? "selected" : ""}"><td><button class="server-name" data-action="select" data-id="${escapeHTML(s.id)}" aria-pressed="${selected === s.id}"><span class="server-icon" aria-hidden="true">▤</span><span><strong>${escapeHTML(s.id)}</strong><small>${escapeHTML(s.description || "暂无备注")}</small></span></button></td><td class="address">${escapeHTML(s.host)}:${s.port}<small>${escapeHTML(s.username)} · ${s.private_key ? "SSH 私钥" : "密码认证"}</small></td><td>${statusBadge(s.id)}</td><td><button class="text-link" data-action="test" data-id="${escapeHTML(s.id)}" ${probes.get(s.id)?.type === "running" ? "disabled" : ""}>测试连接</button></td></tr>`).join("")}</tbody></table></div>`;
+  $("#server-rows").innerHTML = count ? `
+    <div class="table-wrap"><table><thead><tr><th>名称</th><th>主机地址</th><th>认证方式</th><th>最近测试</th><th>状态</th><th>操作</th></tr></thead>
+      <tbody>${rows.map(x => {
+        const p = probes.get(x.id);
+        return '<tr class="server-row ' + (selected === x.id ? "selected" : "") + '"><td><button class="server-name" data-action="select" data-id="' +
+          escapeHTML(x.id) + '"><span class="server-icon">▤</span><span><strong>' + escapeHTML(x.id) +
+          '</strong><small>' + escapeHTML(x.description || "") + '</small></span></button></td><td class="address">' +
+          escapeHTML(x.host) + ':' + x.port + '<small>' + escapeHTML(x.username) +
+          '</small></td><td>' + (x.private_key ? "SSH 私钥" : "密码认证") + '</td><td>' +
+          escapeHTML(p?.checkedAt || "—") + '</td><td>' + statusBadge(x.id) +
+          '</td><td><button class="text-link" data-action="test" data-id="' + escapeHTML(x.id) + '"' +
+          (p?.type === "running" ? " disabled" : "") + '>测试连接</button></td></tr>';
+      }).join("")}</tbody></table></div>
+      <div class="pager"><span class="pager-meta">共 ${count} 条 · 第 ${serverPage} / ${pages} 页</span>
+        <button data-action="server-prev" ${serverPage === 1 ? "disabled" : ""}>上一页</button>
+        <button data-action="server-next" ${serverPage >= pages ? "disabled" : ""}>下一页</button>
+        <select id="server-page-size" aria-label="每页条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select>
+      </div>` :
+      '<div class="empty"><h3>没有匹配的服务器</h3><button class="secondary" data-action="clear-search">清除筛选</button></div>';
+  const size = $("#server-page-size");
+  if(size){ size.value = String(serverSize); size.addEventListener("change", e => { serverSize = Number(e.target.value); serverPage = 1; renderServerRows(); }); }
 }
 function renderDetail() {
-  const s = state.servers.find((s) => s.id === selected);
-  if (!s) {
-    $("#server-detail").innerHTML =
-      `<div class="selection-empty"><h3>连接详情</h3>添加或选择一台服务器，查看它的连接方式与会话。</div>`;
-    return;
-  }
-  const rows = [
-    ["主机地址", `${s.host}:${s.port}`],
-    ["登录账户", s.username],
-    [
-      s.private_key ? "服务端私钥" : "密码环境变量",
-      s.private_key || s.password_env,
-    ],
-    ["主机公钥文件", s.known_hosts],
-  ];
-  $("#server-detail").innerHTML =
-    `<div class="detail"><div class="detail-heading"><span class="server-icon" aria-hidden="true">▤</span><div><h3>${escapeHTML(s.id)}</h3><p>${escapeHTML(s.description || "SSH 服务器")}</p></div></div><dl class="details">${rows.map(([k, v]) => `<div><dt>${k}</dt><dd>${escapeHTML(v)}</dd></div>`).join("")}</dl><button class="primary wide" data-action="open-session" data-id="${escapeHTML(s.id)}">›_ 打开会话</button><button class="secondary wide" data-action="edit" data-id="${escapeHTML(s.id)}">编辑连接</button><div class="detail-rule"></div><div class="detail-foot">${probes.get(s.id)?.message ? escapeHTML(probes.get(s.id).message) : "测试连接只验证 SSH 登录，不执行远程命令。"}<br><button class="text-link" data-action="delete" data-id="${escapeHTML(s.id)}">移除此服务器</button></div></div>`;
+  const el = $("#server-detail");
+  if(!el) return;
+  const x = state.servers.find(s => s.id === selected);
+  el.hidden = !x;
+  if(!x) return;
+  const probe = probes.get(x.id);
+  const rows = [["地址", x.host + ":" + x.port],["登录用户",x.username],
+    ["认证方式",x.private_key ? "SSH 私钥" : "密码认证"],
+    ["凭据引用", x.private_key || x.password_env],["主机公钥",x.known_hosts],
+    ["最近测试",probe?.checkedAt || "未检测"]];
+  el.innerHTML = `<div class="detail">
+    <div class="detail-heading"><span class="server-icon">▤</span><div><h3>${escapeHTML(x.id)}</h3><p>${escapeHTML(x.description || "")}</p></div>
+      <button class="icon-button" data-action="close-detail" aria-label="关闭详情">×</button></div>
+    <dl class="details">${rows.map(([k,v]) => '<div><dt>' + escapeHTML(k) + '</dt><dd>' + escapeHTML(v) + '</dd></div>').join("")}</dl>
+    <div class="inline-actions"><button class="primary" data-action="edit" data-id="${escapeHTML(x.id)}">编辑服务器</button>
+      <button class="secondary" data-action="test" data-id="${escapeHTML(x.id)}">测试连接</button>
+      <button class="text-link" data-action="delete" data-id="${escapeHTML(x.id)}">移除服务器</button></div>
+    ${probe?.message ? '<p class="detail-foot">' + escapeHTML(probe.message) + '</p>' : ""}</div>`;
 }
 function editServer(id = null) {
   const form = $("#server-form");
@@ -390,7 +390,6 @@ function renderClients() {
     ["Codex", "环境变量认证", "C"],
     ["Cursor", "远程 HTTP", "↗"],
     ["Claude Code", "远程 HTTP", "✳"],
-    ["ChatGPT", "OAuth 待支持", "G"],
   ];
   const url = state.mcp_url;
   let code, filename;
@@ -421,94 +420,69 @@ function renderClients() {
   $("#page-content").innerHTML =
     `<div class="client-layout"><div class="client-options" aria-label="选择 AI 客户端">${clients.map(([name, note, icon]) => `<button class="client-option" data-action="client" data-id="${name}" aria-pressed="${client === name}"><span class="client-logo" aria-hidden="true">${icon}</span><span><strong>${name}</strong><small>${note}</small></span></button>`).join("")}</div><section class="panel setup-panel"><span class="section-kicker">CLIENT CONNECTION</span><h2>连接 ${escapeHTML(client)}</h2><p class="muted">把服务器能力带到你习惯的 AI 工作流中。</p>${client === "ChatGPT" ? `<div class="callout"><strong>ChatGPT 的 OAuth 接入尚未实现</strong><p>当前服务支持 Bearer Token。ChatGPT 的远程 OAuth 流程需要后续的 OAuth 网关或原生支持。请勿通过关闭认证来接入。</p></div>` : `<div class="step"><div class="step-label"><span>1</span>确认 MCP 地址</div><div class="endpoint"><code id="endpoint-url">${escapeHTML(url)}</code><button class="text-link" data-action="copy-url">复制地址</button></div></div><div class="step"><div class="step-label"><span>2</span>添加客户端配置</div><div class="code-block"><div class="code-heading"><span>${filename}</span><button data-action="copy-config">复制配置</button></div><pre id="client-config">${escapeHTML(code)}</pre></div></div><div class="step"><div class="step-label"><span>3</span>设置 Token，然后验证连接</div><p class="note">在客户端环境中设置 <code>SSH_MCP_TOKEN</code>，使用服务端的 MCP Token，不能使用管理员 Token。重新加载客户端后，让 AI「查看我有哪些服务器」。</p></div><p class="note">配置示例不代表已在你的客户端中完成验收。远程连接请使用有效的 HTTPS 地址。</p>`}</section></div>`;
 }
-function renderSessions() {
-  const current = state.sessions.find((s) => s.session_id === selectedSession);
-  $("#page-content").innerHTML =
-    `<section class="panel"><div class="session-create"><select id="session-server" aria-label="新会话的服务器">${state.servers.map((s) => `<option value="${escapeHTML(s.id)}">${escapeHTML(s.id)}</option>`).join("")}</select><button class="primary" data-action="new-session" ${state.servers.length ? "" : "disabled"}>＋ 新建会话</button></div></section><p class="note">会话与 MCP 客户端共享。服务重启后会话不恢复；控制台提供逐行 Shell 输入。</p><div class="session-layout"><section class="panel session-list">${state.sessions.length ? state.sessions.map((s) => `<button class="session-item" data-action="select-session" data-id="${escapeHTML(s.session_id)}" aria-pressed="${s.session_id === selectedSession}"><strong>${escapeHTML(s.server_id)}</strong>${sessionBadge(s.status)}<small>${escapeHTML(s.session_id.slice(0, 10))} · ${s.kind === "shell" ? "SHELL" : "COMMAND"}</small></button>`).join("") : `<div class="small-empty">还没有会话。选择一台服务器建立连接。</div>`}</section><section class="panel terminal-panel">${current ? `<div class="terminal-head"><strong>${escapeHTML(current.server_id)} / ${escapeHTML(current.session_id.slice(0, 12))}</strong><div class="inline-actions"><span id="terminal-status">${sessionBadge(current.status)}</span><button class="text-link" data-action="close-session" data-id="${escapeHTML(current.session_id)}">关闭会话</button></div></div><pre class="terminal-output" id="terminal-output" tabindex="0" aria-label="会话输出"></pre><form class="terminal-form" id="terminal-form"><input id="terminal-input" autocomplete="off" spellcheck="false" aria-label="Shell 命令" placeholder="输入命令，Enter 发送" ${current.status === "running" ? "" : "disabled"}><button class="primary" ${current.status === "running" ? "" : "disabled"}>发送</button></form><p class="terminal-note">输入会在所选远程账户下执行。全屏交互程序请使用支持 PTY 的 MCP 客户端。</p>` : `<div class="empty"><span class="empty-symbol">›_</span><h3>选择一个终端会话</h3><p>在这里读取输出并继续操作。</p></div>`}</section></div>`;
-  if (current) {
-    $("#terminal-output").textContent =
-      outputs.get(current.session_id)?.text || "等待输出…";
-    $("#terminal-form").addEventListener("submit", (event) => {
-      event.preventDefault();
-      const input = $("#terminal-input"),
-        value = input.value;
-      if (!value.trim()) return;
-      busy(event.submitter, async () => {
-        await api(`/sessions/${current.session_id}/input`, "POST", {
-          data: value + "\n",
-        });
-        input.value = "";
-      });
-    });
-    pollSession(current.session_id, pollGeneration);
-  }
-}
-async function pollSession(id, generation) {
-  if (generation !== pollGeneration || !token) return;
-  if (document.hidden) {
-    pollTimer = setTimeout(() => pollSession(id, generation), 1000);
-    return;
-  }
-  const buffer = outputs.get(id) || {
-    text: "",
-    stdout_cursor: 0,
-    stderr_cursor: 0,
-  };
-  try {
-    const result = await api(`/sessions/${id}/read`, "POST", {
-      stdout_cursor: buffer.stdout_cursor,
-      stderr_cursor: buffer.stderr_cursor,
-    });
-    if (generation !== pollGeneration) return;
-    if (result.stdout.dropped_chars || result.stderr.dropped_chars)
-      buffer.text += "\n[部分输出已超出服务端缓冲容量]\n";
-    buffer.text +=
-      result.stdout.text +
-      (result.stderr.text ? "\n[stderr] " + result.stderr.text : "");
-    buffer.text = buffer.text
-      .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
-      .slice(-100000);
-    buffer.stdout_cursor = result.stdout.cursor;
-    buffer.stderr_cursor = result.stderr.cursor;
-    outputs.set(id, buffer);
-    const output = $("#terminal-output"),
-      atBottom =
-        output.scrollTop + output.clientHeight >= output.scrollHeight - 30;
-    output.textContent = buffer.text || "等待输出…";
-    if (atBottom) output.scrollTop = output.scrollHeight;
-    $("#terminal-status").innerHTML = sessionBadge(result.status);
-    if (result.status !== "running") {
-      $("#terminal-input").disabled = true;
-      $("#terminal-form button").disabled = true;
-    }
-    if (
-      result.status === "running" ||
-      result.stdout.has_more ||
-      result.stderr.has_more
-    )
-      pollTimer = setTimeout(
-        () => pollSession(id, generation),
-        result.stdout.has_more || result.stderr.has_more ? 100 : 1000,
-      );
-  } catch (error) {
-    if (generation === pollGeneration && !(error instanceof StaleRequest))
-      notify(`${error.message} 可点击刷新恢复。`, true);
-  }
-}
-function renderActivity() {
-  const labels = {
-    "server.create": "添加服务器",
-    "server.update": "编辑服务器",
-    "server.delete": "移除服务器",
-    "connection.test": "测试连接",
-    "session.create": "创建会话",
-    "session.close": "关闭会话",
-    "session.input": "发送会话输入",
-  };
-  $("#page-content").innerHTML =
-    `<section class="panel"><div class="panel-title"><h2>最近的管理操作</h2><small>最多显示 50 条</small></div>${state.activity.length ? `<div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>目标</th><th>结果</th></tr></thead><tbody>${state.activity.map((a) => `<tr><td>${escapeHTML(new Date(a.timestamp).toLocaleString("zh-CN", { hour12: false }))}</td><td>${escapeHTML(labels[a.event] || a.event)}</td><td class="activity-target">${escapeHTML(a.target)}</td><td>${a.outcome === "ok" ? badge("ok", "已完成") : badge("failed", "未完成")}</td></tr>`).join("")}</tbody></table></div>` : `<div class="empty"><span class="empty-symbol">◷</span><h3>还没有操作记录</h3><p>添加服务器或测试连接后，记录会出现在这里。</p></div>`}</section><p class="note">这里只展示控制台操作，SQLite 保留最近 1,000 条记录。MCP 工具调用仍记录在服务端日志中。</p>`;
-}
 
+
+const activityLabels = {
+  "server.create":"添加服务器","server.update":"编辑服务器","server.delete":"移除服务器",
+  "connection.test":"测试连接","session.create":"创建会话",
+  "session.close":"关闭会话","session.input":"发送会话输入"
+};
+function formatTime(value) {
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("zh-CN", {hour12:false});
+}
+let activityRequestId = 0;
+function renderActivity() {
+  $("#page-content").innerHTML = `
+    <section class="panel"><div class="filters activity-filter">
+      <label class="search"><span>⌕</span><input type="search" id="activity-search" aria-label="搜索操作" placeholder="搜索操作或服务器" value="${escapeHTML(activitySearch)}"></label>
+      <select id="activity-event" aria-label="操作类型"><option value="all">全部操作</option><option value="server">服务器管理</option><option value="connection">连接检测</option><option value="session">MCP 会话</option></select>
+      <select id="activity-outcome" aria-label="操作结果"><option value="all">全部结果</option><option value="ok">成功</option><option value="failed">失败</option></select>
+      <input id="activity-from" type="date" aria-label="开始日期" value="${escapeHTML(activityFrom)}">
+      <input id="activity-to" type="date" aria-label="结束日期" value="${escapeHTML(activityTo)}">
+    </div><div id="activity-rows">正在加载…</div></section>`;
+  $("#activity-event").value = activityEvent; $("#activity-outcome").value = activityOutcome;
+  $("#activity-search").addEventListener("input", e => { activitySearch = e.target.value; activityPage = 1; loadActivity(); });
+  for(const [id,key] of [["activity-event","event"],["activity-outcome","outcome"],["activity-from","start"],["activity-to","end"]]){
+    $("#" + id).addEventListener("change", e => {
+      if(key === "event") activityEvent = e.target.value;
+      else if(key === "outcome") activityOutcome = e.target.value;
+      else if(key === "start") activityFrom = e.target.value;
+      else activityTo = e.target.value;
+      activityPage = 1; loadActivity();
+    });
+  }
+  loadActivity();
+}
+async function loadActivity() {
+  const id = ++activityRequestId;
+  const params = new URLSearchParams({page:String(activityPage),size:String(activitySize),search:activitySearch.trim(),
+    event:activityEvent,outcome:activityOutcome,start:activityFrom,end:activityTo});
+  try {
+    const data = await api("/activity?" + params.toString());
+    if(id !== activityRequestId || view !== "activity" || !$("#activity-rows")) return;
+    const rows = data.items || [], pages = Math.max(1,Math.ceil(data.total/data.size));
+    $("#activity-rows").innerHTML = rows.length ? `<div class="table-wrap"><table><thead>
+      <tr><th>时间</th><th>操作</th><th>目标</th><th>结果</th></tr></thead><tbody>${rows.map(x =>
+       '<tr><td>' + escapeHTML(formatTime(x.timestamp)) + '</td><td>' +
+       escapeHTML(activityLabels[x.event] || x.event) + '</td><td class="activity-target">' +
+       escapeHTML(x.target) + '</td><td>' + badge(x.outcome === "ok" ? "ok" : "failed",x.outcome === "ok" ? "成功" : "失败") +
+       '</td></tr>').join("")}</tbody></table></div>` :
+       '<div class="empty"><h3>没有匹配的操作记录</h3><p>请调整搜索条件。</p></div>';
+    $("#activity-rows").insertAdjacentHTML("beforeend", `<div class="pager">
+      <span class="pager-meta">共 ${data.total} 条 · 第 ${data.page} / ${pages} 页</span>
+      <button data-action="activity-prev" ${data.page <= 1 ? "disabled" : ""}>上一页</button>
+      <button data-action="activity-next" ${data.page >= pages ? "disabled" : ""}>下一页</button>
+      <select id="activity-page-size" aria-label="每页记录条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select></div>`);
+    const size = $("#activity-page-size"); size.value = String(activitySize);
+    size.addEventListener("change", e => { activitySize = Number(e.target.value); activityPage = 1; loadActivity(); });
+  } catch(error) {
+    if(id === activityRequestId && $("#activity-rows")){
+      $("#activity-rows").innerHTML = '<div class="empty">加载失败，请点击刷新重试。</div>';
+      notify(error.message, true);
+    }
+  }
+}
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = event.submitter;
@@ -604,14 +578,17 @@ document.addEventListener("click", (event) => {
   busy(button, async () => {
     if (action === "add") editServer();
     else if (action === "edit") editServer(id);
+    else if (action === "server-prev") { serverPage = Math.max(1,serverPage-1); renderServerRows(); }
+    else if (action === "server-next") { serverPage++; renderServerRows(); }
+    else if (action === "activity-prev") { activityPage = Math.max(1,activityPage-1); loadActivity(); }
+    else if (action === "activity-next") { activityPage++; loadActivity(); }
+    else if (action === "close-detail") { selected = null; renderServerRows(); renderDetail(); }
     else if (action === "select") {
       selected = id;
       renderServerRows();
       renderDetail();
     } else if (action === "clear-search") {
-      search = "";
-      authFilter = "all";
-      renderServers();
+      search = ""; authFilter = "all"; serverStatus = "all"; serverPage = 1; renderServers();
     } else if (action === "test") {
       probes.set(id, { type: "running", text: "连接中" });
       renderServerRows();
@@ -624,9 +601,9 @@ document.addEventListener("click", (event) => {
             ? {
                 type: "ok",
                 text: `可连接 · ${result.latency_ms} ms`,
-                message: "刚刚通过 SSH 登录测试。",
+                message: "SSH 登录测试成功。", checkedAt: formatTime(new Date().toISOString()),
               }
-            : { type: "failed", text: "连接失败", message: result.message },
+            : { type: "failed", text: "连接失败", message: result.message, checkedAt: formatTime(new Date().toISOString()) },
         );
         notify(result.ok ? `${id} 连接成功` : result.message, !result.ok);
       } catch (error) {
@@ -649,29 +626,6 @@ document.addEventListener("click", (event) => {
       await api(`/servers/${id}`, "DELETE", { revision: state.revision });
       await refresh();
       notify("服务器已移除。");
-    } else if (action === "open-session" || action === "new-session") {
-      const result = await api("/sessions", "POST", {
-        server_id: id || $("#session-server").value,
-      });
-      selectedSession = result.session_id;
-      view = "sessions";
-      await refresh();
-    } else if (action === "select-session") {
-      selectedSession = id;
-      render();
-    } else if (action === "close-session") {
-      if (
-        !(await confirmAction(
-          "关闭会话",
-          "关闭后将释放连接并丢弃缓冲输出。远程脱离终端的后台进程不保证结束。",
-        ))
-      )
-        return;
-      stopPolling();
-      await api(`/sessions/${id}`, "DELETE", {});
-      outputs.delete(id);
-      await refresh();
-      notify("会话已关闭。");
     } else if (action === "client") {
       client = id;
       renderClients();
@@ -715,8 +669,8 @@ function configureLogin() {
   const submit = $("#login-form button[type=submit]");
   submit.hidden = locked;
   submit.textContent = setup ? "创建账号并进入控制台" : "进入控制台";
-  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "连接你的工作空间";
-  $("#login-description").textContent = locked ? "当前还没有管理员账号。请打开部署时生成的完整初始化链接，再创建用户名和密码。" : oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录，管理服务器与客户端授权。") : "使用服务端设置的管理员 Token 登录。";
+  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "登录 Portlane";
+  $("#login-description").textContent = locked ? "当前还没有管理员账号。请打开部署时生成的完整初始化链接，再创建用户名和密码。" : oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录。") : "使用管理员 Token 登录。";
   $("#password-label").textContent = oauth ? (setup ? "设置密码" : "密码") : "管理员 Token";
   const input = $("#admin-token");
   input.minLength = oauth ? (setup ? 12 : 1) : 32;
@@ -729,7 +683,7 @@ function configureLogin() {
   $("#username").required = oauth;
   $("#login-form button[type=submit]").disabled = locked;
   $("#remember").closest("label").hidden = oauth;
-  $(".login-help").textContent = oauth ? (setup ? (setupReady ? "初始化链接将在创建账号后失效。连接凭据由系统自动生成，无需填写。" : "请使用部署管理员提供的初始化链接创建账号。") : "登录状态由安全 Cookie 保存，8 小时后过期。忘记密码可由服务端管理员重设。") : "管理员 Token 与 AI 客户端的 MCP Token 分开设置。";
+  $(".login-help").textContent = oauth ? (setup ? "初始化链接只能使用一次。" : "") : "管理员 Token 不等于 MCP Token。";
 }
 async function showConsent() {
   const info = await authRequest(`/consent?request=${encodeURIComponent(authorizationRequest)}`);
@@ -796,3 +750,25 @@ window.addEventListener("hashchange", () => {
   startLogin();
 });
 startLogin();
+
+const themeStoreKey = "portlane.theme";
+function applyTheme(next) {
+  document.body.dataset.theme = next;
+  for (const id of ["#theme-toggle","#login-theme-toggle"]) {
+    const btn = $(id);
+    if (!btn) continue;
+    btn.textContent = next === "dark" ? "☀" : "☾";
+    btn.setAttribute("aria-label",next === "dark" ? "切换到浅色模式" : "切换到深色模式");
+  }
+}
+let storedTheme = "";
+try { storedTheme = localStorage.getItem(themeStoreKey) || ""; } catch {}
+const wantsDark = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
+applyTheme(["light","dark"].includes(storedTheme) ? storedTheme : wantsDark ? "dark" : "light");
+function toggleTheme() {
+  const next = document.body.dataset.theme === "dark" ? "light" : "dark";
+  applyTheme(next);
+  try { localStorage.setItem(themeStoreKey,next); } catch {}
+}
+$("#theme-toggle").addEventListener("click",toggleTheme);
+$("#login-theme-toggle").addEventListener("click",toggleTheme);

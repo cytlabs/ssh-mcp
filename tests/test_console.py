@@ -66,6 +66,22 @@ class RegistryTests(unittest.TestCase):
         self.assertEqual(self.registry.snapshot()["revision"], 2)
 
 
+    def test_audit_filter_and_pagination(self):
+        for i in range(25):
+            self.registry.record("connection.test" if i % 2 else "server.update",
+                                 f"host-{i}", "failed" if i % 5 == 0 else "ok")
+        first = self.registry.search_history(page=1, size=10)
+        second = self.registry.search_history(page=2, size=10)
+        self.assertEqual(first["total"], 25)
+        self.assertEqual(len(first["items"]), 10)
+        self.assertEqual(first["items"][0]["target"], "host-24")
+        self.assertEqual(second["items"][0]["target"], "host-14")
+        self.assertEqual(self.registry.search_history(event="connection", size=10)["total"], 12)
+        self.assertEqual(self.registry.search_history(outcome="failed", size=10)["total"], 5)
+        self.assertEqual(self.registry.search_history(search="host-18", size=10)["total"], 1)
+        self.assertEqual(self.registry.search_history(search="测试连接", size=10)["total"], 12)
+
+
 class ConsoleTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         config = Config(servers=())
@@ -155,6 +171,23 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         await self.request("/admin/sessions/test/input", "POST", {"data":"secret-command"})
         self.manager.send.assert_awaited_once_with("test", "secret-command")
         self.assertNotIn("secret-command", str(self.registry.history()))
+
+
+    async def test_activity_endpoint_validates_filters(self):
+        self.registry.record("server.create", "staging")
+        result = await self.app.dispatch("GET", "/admin/activity", {}, b"page=1&size=10")
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["target"], "staging")
+        from ssh_mcp.errors import InputError
+        with self.assertRaises(InputError):
+            await self.app.dispatch("GET", "/admin/activity", {}, b"page=-1&size=10")
+        with self.assertRaises(InputError):
+            await self.app.dispatch("GET", "/admin/activity", {}, b"page=1&size=1000")
+        with self.assertRaises(InputError):
+            await self.app.dispatch("GET", "/admin/activity", {}, b"outcome=incorrect")
+        with self.assertRaises(ValueError):
+            await self.app.dispatch("GET", "/admin/activity", {}, b"start=not-a-date")
+
 
     async def test_missing_admin_setup_is_explicit(self):
         self.app.admin_app = None

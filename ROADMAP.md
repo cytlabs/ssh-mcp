@@ -10,7 +10,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 
 源码已实现多目标配置、密码/密钥认证、主机密钥校验、任意命令、持久 PTY、
 异步输出、SFTP 分块传输、HTTP Bearer 认证、stdio、CLI 及资源限制。
-内置中文管理控制台和 SQLite，配套安装包、部署模板、中文文档和 CI。
+内置中文管理控制台和 SQLite，配套安装包、部署模板、中文文档和 CI。Web 控制台只提供概览、服务器、操作记录和 MCP 接入；远程终端、文件操作由 MCP 工具提供给 AI 客户端。
 
 **当前是已公开源码的开发预览，不等同于完成生产部署或正式版本验收。**
 
@@ -27,10 +27,10 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 | [MCP-002 / #2](https://github.com/cytlabs/ssh-mcp/issues/2) | 已实现，客户端验收进行中 | 原生 OAuth、发现/DCR、PKCE、密码/Cookie 登录、同意、刷新/撤销和资源受众校验；自动协议及 HTTPS 浏览器流程验收，仍需真实 Codex/ChatGPT 对话。 |
 | [MCP-003 / #1](https://github.com/cytlabs/ssh-mcp/issues/1) | 已部署并完成协议/控制台联调，待真实 AI 客户端验收 | 已恢复 SSH，独立 systemd 服务、SQLite、普通 SSH 账户及可信 IP HTTPS 已上线；公网 MCP SDK、真实 SSH/SFTP、桌面/手机控制台及重启持久化检查通过。真实 AI 对话验收仍未完成。私人地址与凭据不进入仓库。 |
 | [MCP-004 / #4](https://github.com/cytlabs/ssh-mcp/issues/4) | 源码已提交，正式发布待完成 | 仓库已建立为 cytlabs/ssh-mcp。仍需核实私密漏洞报告、软件包命名、依赖记录及发布条件；验收完成后再打标签或发布安装包。 |
-| MCP-005 | 已实现并通过自动浏览器检查 | 中文控制台、SQLite、管理 API、DOM 流程及桌面/手机浏览器脚本已验证；线上浏览器已通过真实 SSH 终端、登录/刷新/退出及桌面/手机布局检查。 |
+| MCP-005 | 源码已实现，整体验证以最新 CI 为准 | 简洁的四页控制台、浅色与深色主题、服务器搜索/分页、管理记录查询、OAuth 登录及浏览器测试；MCP 终端能力保留但不在网页展示。 |
 | [MCP-006 / #3](https://github.com/cytlabs/ssh-mcp/issues/3) | 已实现并通过 CI | Python/npm 依赖锁定、固定应用基础镜像摘要、wheel 资源校验及构建记录上传；三版本测试、浏览器、容器和审计通过。见 [构建说明](docs/reproducible-builds.md)。 |
 | [MCP-007 / #6](https://github.com/cytlabs/ssh-mcp/issues/6) | 已实现并通过 CI | [PR #7](https://github.com/cytlabs/ssh-mcp/pull/7) 增加后端就绪握手、分阶段时限和脱敏诊断，前置失败后跳过依赖步骤；慢启动及异常回归合计 24 项、浏览器、三版本 Python 和容器检查通过。见验证记录。 |
-| [MCP-009 / #11](https://github.com/cytlabs/ssh-mcp/issues/11) | 待接入 CI | OAuth HTTPS 浏览器验收已在本机通过；现有 GitHub 凭据没有 workflow 写权限，维护者需将新脚本加入 console 作业。 |
+| [MCP-009 / #11](https://github.com/cytlabs/ssh-mcp/issues/11) | 已加入 workflow，待按最新提交复核 | OAuth HTTPS 浏览器用例已在 CI console 作业中配置，按实际运行记录确认。 |
 | [MCP-008 / #8](https://github.com/cytlabs/ssh-mcp/issues/8) | 待修复 | Python 3.10 完整集成测试通过，但退出时出现子进程 transport 事件循环关闭警告；需定位并等待资源清理，不能隐藏 stderr。 |
 
 ## 本轮收尾清单
@@ -45,7 +45,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 - [x] OAuth 核心、中文密码登录和授权管理（#2）。
 - [x] OAuth 线上升级、公开发现端点及原命令执行链路复测（#10）。
 - [ ] 管理员首次用户名密码设置与 OAuth 真实 Codex/ChatGPT 对话验收（#1、#2）。
-- [ ] OAuth HTTPS 浏览器测试接入 CI（#11）。
+- [x] OAuth HTTPS 浏览器脚本已写入 CI 工作流（#11，结果按最新 CI 记录核对）。
 - [x] 依赖锁定与可复现构建（#3，PR #5）。
 - [ ] 私密漏洞报告渠道和首次正式发布（#4）。
 - [x] DOM 测试稳定性修复的 CI 验收（#6，PR #7）。
@@ -54,7 +54,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 
 1. #6 的测试修复已通过 CI；保留后续运行诊断，继续观察稳定性。
 2. 生产部署与公开 HTTPS 协议检查已完成，继续 #1 的真实 AI 客户端对话验收。
-3. 实现 #2 的 OAuth 与 ChatGPT 接入，记录独立于 Bearer 客户端的验收结果。
+3. 完成 #2 的 OAuth 在真实 Codex/ChatGPT 等客户端中的体验验收；协议实现已完成，不重复开发认证框架。
 4. 处理 #8 的测试退出清理警告；核对 #4 的发布条件和文档状态，完成后再发布正式版本。
 
 ## 0.2 — 客户端覆盖与管理体验
