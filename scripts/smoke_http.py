@@ -80,6 +80,8 @@ async def files(session, server):
         raw = bytes(range(256))
         await call(session, "transfer_file", server_id=server, direction="upload", remote_path=path,
                    data_base64=base64.b64encode(raw).decode(), truncate=True)
+        attributes = await call(session, "stat_file", server_id=server, path=path)
+        require(attributes["size"] == len(raw), "文件属性与上传字节数不符")
         result = await call(session, "transfer_file", server_id=server, direction="download",
                             remote_path=path)
         require(base64.b64decode(result["data"]) == raw, "二进制传输不符")
@@ -106,6 +108,8 @@ async def run(args):
             require(response.status_code == 401, "匿名或错误 Token 未被拒绝")
     print("通过：公开 HTTPS 信任链、匿名及错误 Token 拒绝")
     async with connect(args.url, token) as session:
+        discovered = await session.list_tools()
+        require(len(discovered.tools) == 14, "MCP 工具清单不完整")
         result = await call(session, "list_servers")
         require(any(s["id"] == args.server for s in result["servers"]), "目标不在清单中")
         allowed = {"id", "host", "port", "username", "description"}
@@ -116,6 +120,7 @@ async def run(args):
         terminal = await call(session, "create_session", server_id=args.server, pty=True)
         sid = terminal["session_id"]
         try:
+            await call(session, "resize_session", session_id=sid, cols=100, rows=40)
             await call(session, "send_input", session_id=sid, data="unset HISTFILE; cd /tmp\n")
             await call(session, "send_input", session_id=sid, data="printf '__MCP_CWD__%s__\\n' \"$PWD\"\n")
             for _ in range(30):
