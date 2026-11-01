@@ -90,7 +90,7 @@ ruff check .
 SSH_MCP_REQUIRE_INTEGRATION=1 python -m unittest discover -s tests -v
 python -m build --no-isolation
 python scripts/check_wheel.py
-pip-audit
+uvx --python 3.12 --from pip-audit==2.10.1 pip-audit --path "$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 ```
 
 自动测试使用临时凭据和本机回环 SSH/SFTP 服务，不读取真实配置或连接生产服务器。
