@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
-    <title>SSH MCP · 服务器控制台</title>
+    <meta name="color-scheme" content="dark" />
+    <title>Portlane · AI 远程连接</title>
     <link rel="stylesheet" href="/console/style.css" />
     <script defer src="/console/app.js"></script>
   </head>
@@ -13,15 +13,16 @@
     <aside class="sidebar">
       <a class="brand" href="/console"
         ><span class="brand-mark" aria-hidden="true">›_</span
-        ><span>SSH MCP<small>SERVER CONSOLE</small></span></a
+        ><span>Portlane<small>AI REMOTE ACCESS</small></span></a
       >
       <div class="workspace-label">
         <span class="workspace-icon">S</span
         ><span>我的工作空间<small>Self-hosted workspace</small></span>
       </div>
-      <p class="nav-caption">工作空间</p>
+      <p class="nav-caption">控制台</p>
       <nav aria-label="主导航">
-        <button data-view="servers" aria-current="page">
+        <button data-view="dashboard" aria-current="page"><span aria-hidden="true">◈</span>概览</button>
+        <button data-view="servers">
           <span aria-hidden="true">▤</span>服务器<span
             id="nav-count"
             class="nav-count"
@@ -47,7 +48,7 @@
     <div class="workspace">
       <header class="topbar">
         <div>
-          工作空间 <span>/</span> <strong id="breadcrumb">服务器</strong>
+          控制台 <span>/</span> <strong id="breadcrumb">概览</strong>
         </div>
         <div class="account">
           <span id="connection-label">尚未登录</span
@@ -138,7 +139,7 @@
         >
       </main>
       <footer>
-        SSH MCP <span>连接由服务提供，操作由你掌控。</span
+        Portlane <span>AI 执行 · 控制台观察。</span
         ><span class="footer-right">独立部署 · SQLite</span>
       </footer>
     </div>
