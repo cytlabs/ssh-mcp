@@ -99,6 +99,8 @@ for (const startupDelay of [0, 3000]) test(
         $("#remember").checked = true;
         submit("#login-form");
         await wait(() => !$("#app-view").hidden);
+        assert.match($("#page-content").textContent, /已配置服务器/);
+        click("[data-view=servers]");
         assert.equal(doc.querySelectorAll(".server-row").length, 3);
         assert.equal(w.sessionStorage.getItem("ssh-mcp.console.admin"), admin);
         assert.equal($("#admin-token").value, "");
