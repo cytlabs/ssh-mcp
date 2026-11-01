@@ -3,7 +3,8 @@
     "public_url": "https://ssh-mcp.example.com",
     "listen_host": "127.0.0.1",
     "listen_port": 8000,
-    "token_env": "SSH_MCP_TOKEN"
+    "token_env": "SSH_MCP_TOKEN",
+    "auth_mode": "oauth"
   },
   "limits": {
     "max_sessions": 32,

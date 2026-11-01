@@ -24,12 +24,13 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 | 编号 | 状态 | 内容与完成条件 |
 | --- | --- | --- |
 | MCP-001 | 已完成自动化验证 | Python 3.10/3.12/3.13 各 45 项测试、Ruff、构建和依赖审计通过；容器及浏览器任务通过。见 [验证记录](docs/verification.md)。 |
-| [MCP-002 / #2](https://github.com/cytlabs/ssh-mcp/issues/2) | 待开发 | OAuth 网关/身份提供方或原生 OAuth，包含发现端点、PKCE、同意、刷新/撤销、目标受众校验及浏览器客户端验收。用于已记录的 ChatGPT OAuth 接入流程。 |
+| [MCP-002 / #2](https://github.com/cytlabs/ssh-mcp/issues/2) | 已实现，客户端验收进行中 | 原生 OAuth、发现/DCR、PKCE、密码/Cookie 登录、同意、刷新/撤销和资源受众校验；自动协议及 HTTPS 浏览器流程验收，仍需真实 Codex/ChatGPT 对话。 |
 | [MCP-003 / #1](https://github.com/cytlabs/ssh-mcp/issues/1) | 已部署并完成协议/控制台联调，待真实 AI 客户端验收 | 已恢复 SSH，独立 systemd 服务、SQLite、普通 SSH 账户及可信 IP HTTPS 已上线；公网 MCP SDK、真实 SSH/SFTP、桌面/手机控制台及重启持久化检查通过。真实 AI 对话验收仍未完成。私人地址与凭据不进入仓库。 |
 | [MCP-004 / #4](https://github.com/cytlabs/ssh-mcp/issues/4) | 源码已提交，正式发布待完成 | 仓库已建立为 cytlabs/ssh-mcp。仍需核实私密漏洞报告、软件包命名、依赖记录及发布条件；验收完成后再打标签或发布安装包。 |
 | MCP-005 | 已实现并通过自动浏览器检查 | 中文控制台、SQLite、管理 API、DOM 流程及桌面/手机浏览器脚本已验证；线上浏览器已通过真实 SSH 终端、登录/刷新/退出及桌面/手机布局检查。 |
 | [MCP-006 / #3](https://github.com/cytlabs/ssh-mcp/issues/3) | 已实现并通过 CI | Python/npm 依赖锁定、固定应用基础镜像摘要、wheel 资源校验及构建记录上传；三版本测试、浏览器、容器和审计通过。见 [构建说明](docs/reproducible-builds.md)。 |
 | [MCP-007 / #6](https://github.com/cytlabs/ssh-mcp/issues/6) | 已实现并通过 CI | [PR #7](https://github.com/cytlabs/ssh-mcp/pull/7) 增加后端就绪握手、分阶段时限和脱敏诊断，前置失败后跳过依赖步骤；慢启动及异常回归合计 24 项、浏览器、三版本 Python 和容器检查通过。见验证记录。 |
+| [MCP-009 / #11](https://github.com/cytlabs/ssh-mcp/issues/11) | 待接入 CI | OAuth HTTPS 浏览器验收已在本机通过；现有 GitHub 凭据没有 workflow 写权限，维护者需将新脚本加入 console 作业。 |
 | [MCP-008 / #8](https://github.com/cytlabs/ssh-mcp/issues/8) | 待修复 | Python 3.10 完整集成测试通过，但退出时出现子进程 transport 事件循环关闭警告；需定位并等待资源清理，不能隐藏 stderr。 |
 
 ## 本轮收尾清单
@@ -41,7 +42,10 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 - [x] 更新验证记录，并将未完成问题建立为 Issues。
 - [x] 独立生产部署、可信 IP HTTPS、公开 MCP 协议与线上控制台联调（#1）。
 - [ ] 真实 AI 客户端对话验收（#1），不以 SDK 或浏览器控制台代替。
-- [ ] OAuth 和 ChatGPT 接入（#2）。
+- [x] OAuth 核心、中文密码登录和授权管理（#2）。
+- [x] OAuth 线上升级、公开发现端点及原命令执行链路复测（#10）。
+- [ ] 管理员首次用户名密码设置与 OAuth 真实 Codex/ChatGPT 对话验收（#1、#2）。
+- [ ] OAuth HTTPS 浏览器测试接入 CI（#11）。
 - [x] 依赖锁定与可复现构建（#3，PR #5）。
 - [ ] 私密漏洞报告渠道和首次正式发布（#4）。
 - [x] DOM 测试稳定性修复的 CI 验收（#6，PR #7）。
@@ -55,7 +59,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 
 ## 0.2 — 客户端覆盖与管理体验
 
-- OAuth 和真实 ChatGPT/Claude 浏览器客户端验收。
+- 扩展已实现的 OAuth 客户端覆盖，完成真实 ChatGPT/Claude 浏览器客户端验收。
 - 与 SQLite 网页操作一致的管理员 CLI。
 - 不泄露秘密的连接诊断。
 - 经验证的依赖锁定与兼容矩阵。
@@ -70,3 +74,5 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 
 不内置模型或任务规划循环，不开发业务专用工具，不设置命令白名单，
 不隐式读取无关 SSH 配置或 Agent，不承诺用应用输出过滤隔离同机 root 权限。
+
+当前登录方案确定为本地用户名和密码；Token 自动签发/刷新，初始化链接自动生成。暂不接入 Google、GitHub 或邮件服务。

@@ -121,3 +121,40 @@ ChatGPT 所需的 OAuth 接入尚未实现，见 [Issue #2](https://github.com/c
 Bearer 客户端验收通过也不能关闭 OAuth 待办。
 源码已提交 GitHub；未发布 PyPI 安装包、正式镜像或 Release。
 首次正式发布准备见 [Issue #4](https://github.com/cytlabs/ssh-mcp/issues/4)。
+
+## 2026-10-11：OAuth 与命令返回值
+
+本轮新增原生 OAuth（发现、DCR、S256 PKCE、浏览器同意、刷新轮换与撤销），
+中文密码初始化/登录页、HttpOnly Cookie、授权管理和密码重设 CLI。
+
+- Python 后端测试增加到 56 项：原 47 项加 8 项 OAuth 安全流程测试及 1 项 OAuth→MCP→真实回环 SSH 集成测试。
+- OAuth 命令集成测试显式轮询最终状态，验证 stdout、stderr、非零退出码以及撤销后拒绝 MCP 请求。
+- 原 DOM 24 项、桌面/手机 Chromium 控制台检查通过。
+- 新 HTTPS Chromium 流程通过：首次设置、Cookie 刷新保持、显式同意、回调、OAuth Token 换取、MCP 初始化、授权撤销、手机布局、退出和重新登录。
+- Ruff、wheel 构建及静态资源校验通过。Python 3.10 的既有退出清理警告仍由 #8 跟踪。
+- 升级前公开 HTTPS MCP 实际执行低影响命令，得到 stdout、stderr、退出码 7 和 completed 状态；目标使用普通 SSH 账户。
+
+本轮浏览器使用临时自签名 HTTPS 夹具（仅测试客户端信任该证书）；生产入口仍要求有效可信证书。
+协议和浏览器自动化不替代 Codex/ChatGPT 的真实 AI 对话验收。生产首次密码设置应由管理员完成。
+
+新增 `npm run test:oauth-browser` 已在本机通过，尚未接入 GitHub Actions 的 console 作业：当前 GitHub OAuth 凭据没有修改 workflow 的权限。现有 CI 继续运行后端（包含新 OAuth 测试）、原控制台、容器与构建审计。
+
+生产 OAuth 已上线（应用提交 `6cb2353`，PR [#10](https://github.com/cytlabs/ssh-mcp/pull/10)）：
+升级前确认无活动会话，备份原数据库、配置、Nginx、wheel 和源码。公开可信 HTTPS 的初始化页、
+发现端点、公共元数据 CORS 与管理来源校验通过；旧管理员 Token 已不再用于管理登录。
+原 MCP Token 兼容调用再次返回 stdout/stderr、退出码 7 和 completed；会话关闭，既有网站保持正常。
+管理员尚未设置生产密码，真实 OAuth 客户端授权仍待完成。浏览器 CI 接入见 [#11](https://github.com/cytlabs/ssh-mcp/issues/11)。
+
+## 用户名密码与自动初始化链接
+
+按最新产品决定，使用本地用户名和密码，暂不增加第三方登录或邮件服务。
+删除 OAuth 初始化页面的管理员 Token 输入项，服务自动生成一小时有效、一次性的私密初始化链接。
+旧版密码账户迁移为用户名 admin；新建账号可选择用户名。新增初始化链接重发、过期、单次使用、
+权限与旧库迁移测试，后端共 58 项通过；HTTPS 浏览器验证创建账号、用户名密码登录和授权流程通过。
+
+## 初始化页面刷新修复
+
+修复首次注册按钮变灰：初始化权限原先只在 JavaScript 内存中，清除 URL 片段后刷新会丢失。
+现通过同源 POST 将链接兑换为限时 HttpOnly Cookie，刷新恢复初始化状态；无初始化权限时隐藏表单并说明入口。
+新增 Cookie 恢复/失效接口测试及“普通入口提示 → 初始化链接 → 刷新 → 创建账号”的真实 HTTPS 浏览器回归。
+未读取或代替用户设置生产用户名密码。

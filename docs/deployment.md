@@ -64,7 +64,7 @@ cp deploy/.env.example deploy/.env
 - 把所需私钥和已经核验的 `known_hosts` 放入 `deploy/config/secrets`。
 
 编辑 `deploy/.env`，设置相同的 `SSH_MCP_DOMAIN`，分别生成随机且不同的 `SSH_MCP_TOKEN`
-和 `SSH_MCP_ADMIN_TOKEN`，只保留配置实际引用的 SSH 密码/口令环境变量。
+和 `SSH_MCP_ADMIN_TOKEN`（仅旧 Token 模式需要）；推荐 OAuth 模式无需这两个变量，只保留配置实际引用的 SSH 密码/口令环境变量。
 可以用 `ssh-mcp generate-token`，或 `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` 生成 Token。
 真实配置、`.env`、服务器清单和私钥不能提交到仓库。
 
@@ -141,8 +141,8 @@ python scripts/smoke_http.py --url https://ssh-mcp.example.com:8443/mcp --server
 单元启用了 `ProtectHome=true`，运行密钥不要放在操作者的家目录。
 
 原生部署保留回环监听地址，由已有代理终止 TLS。
-将 `/mcp`、`/console`（包括静态文件）和 `/admin/` 原路径转发到 `http://127.0.0.1:8000`，
-保留 Host，允许 POST/GET/PUT/DELETE，限制请求体为 2 MiB，响应超时不少于 45 秒。
+将 `/mcp`、`/console`（包括静态文件）、`/admin/`、`/auth/`、`/oauth/` 和 `/.well-known/` 原路径转发到 `http://127.0.0.1:8000`，
+保留 Host，允许 POST/GET/PUT/DELETE/OPTIONS，限制请求体为 2 MiB，响应超时不少于 45 秒。
 不要记录请求体或认证头。长任务采用短请求轮询，不需让代理连接保持整个命令执行时长。
 
 ## 服务器管理与凭据轮换
@@ -160,7 +160,7 @@ systemd 位于 `/var/lib/ssh-mcp/inventory.sqlite3`。
 可通过 `execute_command` 执行 `id` 等简单命令核验目标。
 
 轮换 MCP Token 时，同时更新服务环境和客户端秘密存储，再重启服务。
-管理员 Token 以相同方式轮换，浏览器重新登录。
+OAuth 模式使用用户名、密码与 Cookie，首次链接由服务自动生成，不需要管理员 Token。旧 `token` 模式管理员 Token 仍通过环境轮换。
 SSH 凭据在目标账户及服务端密钥文件/环境变量中同时更新后重启。
 登录凭据不会出现在 `list_servers` 或配置校验输出中。
 
@@ -183,3 +183,49 @@ SSH 凭据在目标账户及服务端密钥文件/环境变量中同时更新后
 
 升级前关闭或排空会话，安全备份配置和数据库，安装新版本，检查配置后重启，
 再进行 MCP 初始化和临时目标检查。回滚时恢复旧程序及匹配的配置/数据库版本。
+
+## OAuth 升级与运维
+
+将运行配置 `http.auth_mode` 设置为 `oauth`，确认 `public_url` 是实际 HTTPS 源（含非标准端口）。
+OAuth 需要持久化数据库。首次启动自动生成一次性初始化链接，保存在身份库旁的 `*.setup-link` 文件，
+权限为 0600、一小时有效。打开该链接创建用户名密码；过期可使用 `setup-link` 命令重发。
+新部署无需设置 `SSH_MCP_ADMIN_TOKEN` 或 `SSH_MCP_TOKEN`，客户端凭据在 OAuth 授权后自动签发。
+
+升级前备份两个 SQLite（身份库第一次启用时新建）、配置、服务环境及当前 wheel。
+重启前确认没有需要保留的 SSH 会话。回滚到旧版本并恢复原配置会停用 OAuth，但不会删除身份库。
+请同步移除客户端不再适用的 OAuth 或固定 Token 认证设置。
+
+反向代理不要统一拒绝所有跨源请求：OAuth 元数据、注册、Token 和撤销端点需要允许无 Cookie 的 CORS。
+应用仍严格检查管理接口的 Host、Origin 和 CSRF；不要在代理启用凭据型通配 CORS。
+代理不要记录 OAuth 查询字符串、Cookie、密码或令牌。保留 HTTPS 校验。
+
+访问 Token 15 分钟、授权和刷新凭据最长 30 天；刷新采用轮换，旧刷新凭据重放会撤销整个授权。
+授权码 2 分钟且一次性，授权请求 10 分钟。撤销阻止后续 MCP 请求，不能自动终止已启动进程。
+所有授权仍共享服务器和会话；这是单操作者产品，不具备每客户端服务器隔离。
+
+### 客户端接入与兼容性排查
+
+ChatGPT 等远程客户端优先填写 `https://你的域名/mcp`，认证选择 OAuth，
+未创建固定客户端时将 Client ID 和 Client Secret 留空，使用动态注册。
+浏览器直接打开根域名仍进入管理台；根地址收到 MCP POST 或明确的 JSON/SSE 请求时，
+也会转入同一 MCP 接口并保留 `WWW-Authenticate` 发现头，不再返回网页的 405。
+
+参考 [OpenViking 官方 OAuth 接入说明](https://docs.openviking.ai/en/guides/11-oauth)，
+本服务验证时覆盖不同客户端的可选字段：
+注册时省略、传 null 或空字符串的 `scope` 均只使用固定的 `ssh:access`；
+授权请求省略 `resource` 时默认绑定本服务，显式指定其他资源仍被拒绝。
+公共客户端 `none` 可以省略密钥或发送空密钥，非空错误密钥仍被拒绝。
+这些兼容处理不会关闭 PKCE、回调地址、Host/Origin、CSRF 或令牌资源绑定检查。
+
+切换公网域名后，既有授权仍绑定原资源地址，不能直接继续使用旧令牌。
+应更新客户端的 MCP URL 并重新登录授权，不要手改授权数据库来重绑定旧令牌。
+例如从 IP 加端口切换到子域名后，需同时检查 `public_url`、客户端 URL、
+授权发现文档、受保护资源元数据与新令牌实际执行结果。
+
+完整验收应包含：发现 → 浏览器登录 → PKCE 授权 → 换取/刷新/撤销令牌 →
+MCP 初始化和工具扫描 → 一次真实 SSH 命令的 stdout/stderr/非零退出码 →
+临时目录内的文件传输和清理。仅元数据返回 200 或工具列表可见不能代替执行验收。
+
+公开动态注册受限于每分钟 10 次及最多 1,000 个客户端，登录每分钟 10 次，Token 端点每分钟 120 次，
+限制为实例级，重启会重置速率窗口。若大量合法客户端或公开滥用造成限制，需要额外部署边缘限流；
+不要手动删除正在使用的身份数据库来解决限额。未来可增加未使用客户端的管理与清理入口。
