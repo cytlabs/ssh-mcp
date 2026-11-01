@@ -99,7 +99,7 @@ for (const startupDelay of [0, 3000]) test(
         $("#remember").checked = true;
         submit("#login-form");
         await wait(() => !$("#app-view").hidden);
-        assert.match($("#page-content").textContent, /已配置服务器/);
+        assert.match($("#page-content").textContent, /已配置的服务器/);
         click("[data-view=servers]");
         assert.equal(doc.querySelectorAll(".server-row").length, 3);
         assert.equal(w.sessionStorage.getItem("ssh-mcp.console.admin"), admin);
@@ -181,6 +181,7 @@ for (const startupDelay of [0, 3000]) test(
         await wait(() => $("#page-content").textContent.includes("添加服务器"));
         click("#refresh");
         await wait(() => !$("#refresh").disabled);
+        await wait(() => $("#page-content").textContent.includes("添加服务器"));
         assert.match($("#page-content").textContent, /添加服务器/);
         assert.ok(!$("#page-content").textContent.includes("echo hello"));
         click("[data-view=servers]");
