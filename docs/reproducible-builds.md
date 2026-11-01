@@ -21,13 +21,20 @@ uv run --no-sync ruff check .
 SSH_MCP_REQUIRE_INTEGRATION=1 uv run --no-sync python -m unittest discover -s tests -v
 uv run --no-sync python -m build --no-isolation
 uv run --no-sync python scripts/check_wheel.py
-uv run --no-sync pip-audit
+uvx --python 3.12 --from pip-audit==2.10.1 pip-audit --path "$(uv run --no-sync python -c 'import sysconfig; print(sysconfig.get_path("purelib"))')"
 npm ci
 npm audit
 npm run test:ui
 npx playwright install --with-deps chromium
 npm run test:browser
+npm run test:oauth-browser
 ```
+
+安全审计工具固定为 pip-audit 2.10.1，在独立的 Python 3.12 工具环境运行，
+通过 `--path` 审计当前项目虚拟环境；CI 对三个 Python 版本分别执行。
+审计工具不再安装进项目的开发依赖，避免其缓存依赖 filelock 的新版 Python 要求
+阻碍项目继续支持 3.10。审计范围仍包含当前项目环境的全部运行、测试与构建依赖，
+不忽略漏洞，也不跳过 Python 3.10 的审计。
 
 从已验收源码构建 wheel 后，可为生产建立独立环境，仅安装哈希校验的运行依赖与本次 wheel：
 
