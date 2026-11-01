@@ -72,6 +72,7 @@ class Config:
     listen_host: str = "127.0.0.1"
     listen_port: int = 8000
     token_env: str = "SSH_MCP_TOKEN"
+    auth_mode: str = "token"
     max_sessions: int = 32
     buffer_chars: int = 1_048_576
     idle_timeout: int = 1800
@@ -106,7 +107,7 @@ def parse_config(raw: dict, base: Path) -> Config:
     """Validate configuration data; relative credential paths use an operator-owned base."""
     fields(raw, {"servers", "http", "limits"}, "configuration")
     http, limits = raw.get("http", {}), raw.get("limits", {})
-    fields(http, {"public_url", "listen_host", "listen_port", "token_env"}, "http")
+    fields(http, {"public_url", "listen_host", "listen_port", "token_env", "auth_mode"}, "http")
     ranges = {"max_sessions": (1, 1024), "buffer_chars": (1024, 8_388_608),
               "idle_timeout": (1, 604800), "retention_seconds": (1, 86400),
               "connect_timeout": (1, 120), "file_timeout": (1, 3600),
@@ -124,6 +125,8 @@ def parse_config(raw: dict, base: Path) -> Config:
     if (url.scheme != "https" or not url.hostname or url.username or url.password
             or url.query or url.fragment or url.path not in ("", "/")):
         raise ConfigError("http.public_url must be an HTTPS origin without credentials or a path")
+    if kwargs.get("auth_mode", "token") not in ("token", "oauth"):
+        raise ConfigError("http.auth_mode must be token or oauth")
     entries = raw.get("servers")
     if not isinstance(entries, list):
         raise ConfigError("servers must be an array")
