@@ -3,8 +3,8 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="color-scheme" content="light" />
-    <title>SSH MCP · 服务器控制台</title>
+    <meta name="color-scheme" content="dark" />
+    <title>Portlane · AI 远程连接</title>
     <link rel="stylesheet" href="/console/style.css" />
     <script defer src="/console/app.js"></script>
   </head>
@@ -13,15 +13,16 @@
     <aside class="sidebar">
       <a class="brand" href="/console"
         ><span class="brand-mark" aria-hidden="true">›_</span
-        ><span>SSH MCP<small>SERVER CONSOLE</small></span></a
+        ><span>Portlane<small>AI REMOTE ACCESS</small></span></a
       >
       <div class="workspace-label">
         <span class="workspace-icon">S</span
         ><span>我的工作空间<small>Self-hosted workspace</small></span>
       </div>
-      <p class="nav-caption">工作空间</p>
+      <p class="nav-caption">控制台</p>
       <nav aria-label="主导航">
-        <button data-view="servers" aria-current="page">
+        <button data-view="dashboard" aria-current="page"><span aria-hidden="true">◈</span>概览</button>
+        <button data-view="servers">
           <span aria-hidden="true">▤</span>服务器<span
             id="nav-count"
             class="nav-count"
@@ -47,7 +48,7 @@
     <div class="workspace">
       <header class="topbar">
         <div>
-          工作空间 <span>/</span> <strong id="breadcrumb">服务器</strong>
+          控制台 <span>/</span> <strong id="breadcrumb">概览</strong>
         </div>
         <div class="account">
           <span id="connection-label">尚未登录</span
@@ -75,9 +76,11 @@
           </div>
           <form id="login-form" class="login-card">
             <span class="section-kicker">管理控制台</span>
-            <h2>连接你的工作空间</h2>
-            <p>使用服务端设置的管理员 Token 登录。</p>
-            <label for="admin-token">管理员 Token</label
+            <h2 id="login-title">连接你的工作空间</h2>
+            <p id="login-description">正在读取登录方式…</p>
+            <div id="login-fields">
+            <label id="username-label" hidden>用户名<input id="username" autocomplete="username" maxlength="128" placeholder="例如 admin" /></label>
+            <label id="password-label" for="admin-token">管理员 Token</label
             ><input
               id="admin-token"
               type="password"
@@ -91,6 +94,10 @@
                 type="checkbox"
               />在此标签页内保持登录</label
             >
+            <div id="setup-fields" hidden>
+              <label for="confirm-password">确认密码</label><input id="confirm-password" type="password" autocomplete="new-password" />
+            </div>
+            </div>
             <p id="login-error" class="form-error" role="alert"></p>
             <button class="primary wide" type="submit">
               进入控制台 <span aria-hidden="true">→</span>
@@ -100,6 +107,15 @@
               分开设置。首次使用请在服务端配置。
             </p>
           </form>
+        </section>
+        <section id="consent-view" class="panel setup-panel" hidden aria-labelledby="consent-title">
+          <span class="section-kicker">CLIENT AUTHORIZATION</span>
+          <h1 id="consent-title">允许客户端连接？</h1>
+          <p id="consent-client"></p><p class="note">客户端名称由客户端提供，未经本站认证。请核对以下回调地址。</p>
+          <pre id="consent-redirect" class="consent-address"></pre>
+          <p>授权后，该客户端可以访问所有已配置服务器，执行命令、读写文件和管理终端会话。实际权限由 SSH 登录账户决定。</p>
+          <p class="note">授权最长有效 30 天，可随时在「MCP 接入」中撤销。</p>
+          <div class="dialog-actions"><button id="deny-consent" class="secondary">拒绝</button><button id="allow-consent" class="primary">允许连接</button></div>
         </section>
         <div id="app-view" hidden>
           <section class="page-heading">
@@ -123,7 +139,7 @@
         >
       </main>
       <footer>
-        SSH MCP <span>连接由服务提供，操作由你掌控。</span
+        Portlane <span>AI 执行 · 控制台观察。</span
         ><span class="footer-right">独立部署 · SQLite</span>
       </footer>
     </div>
