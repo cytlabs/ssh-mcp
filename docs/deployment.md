@@ -105,11 +105,31 @@ docker compose -p ssh-mcp -f deploy/compose.existing-proxy.yaml --env-file deplo
 若代理也在容器内，其 `127.0.0.1` 并不是主机，需要明确配置共享私有 Docker 网络。
 修改共享代理前，检查已有监听和路由并备份，验证配置通过后才重载，随后复查原有应用健康。
 
+Nginx 可参考 [独立 HTTPS 端口模板](../deploy/nginx.existing-proxy.conf.example)。
+模板使用 8443，保留请求 Host，拒绝不匹配的 Host/Origin，关闭访问日志、响应缓冲和自动重放。
+替换域名、证书路径及端口后先运行 `nginx -t`，成功后重载。
+云主机还需在安全组中放行所选 HTTPS 端口；应用回环端口不应开放。
+本机访问成功而公网 TCP 超时，只能证明本机服务可用，应继续检查安全组与网络路径。
+复用短期 IP 证书时，确认续期任务成功后会校验并重载 Nginx，且证书覆盖实际访问的 IP。
+
 没有域名时，可以使用覆盖公网 IP 的可信证书提供 HTTPS。
 复用已有 IP 入口前先核实证书覆盖范围和续期方式。
 若根路径与现有应用冲突，可在端口允许且客户端支持的前提下设置独立 HTTPS 监听。
 `http.public_url` 必须包含实际的非标准端口。
 不要关闭 TLS 验证；当前控制台要求 `/console`、`/admin/`、`/mcp` 位于源地址根路径，不能直接假设任意子路径可用。
+
+配置客户端前可运行 [HTTPS 联调脚本](../scripts/smoke_http.py)：
+
+```sh
+# 通过秘密环境提供 SSH_MCP_TOKEN，不把值写入命令行参数。
+python scripts/smoke_http.py --url https://ssh-mcp.example.com:8443/mcp --server staging --files
+```
+
+此脚本必须只对管理员明确授权的目标执行；默认不写远程文件。
+`--files` 会在独占创建的随机 `/tmp/ssh-mcp-smoke-*` 目录内验证中文文件、修改后 Shell 校验及二进制传输，
+清理只删除该目录里的 `probe.txt` 和空目录。若创建或清理结果无法确认，会提示需要核实的目录。
+另验证鉴权、公开清单字段、退出码、PTY 状态和持续 30 秒命令的跨连接会话找回。
+脚本验证真实 HTTPS/MCP/SSH 协议链路，仍不替代 [AI 客户端验收](clients.md#acceptance-walkthrough)。
 
 依赖和构建流程见 [可复现安装与构建](reproducible-builds.md)。
 

@@ -1,6 +1,38 @@
 # 验证记录
 
-日期：2026-10-09。版本：`0.1.0a1`（开发预览，未发布正式版本）。
+最近更新：2026-10-11。版本：`0.1.0a1`（开发预览，未发布正式版本）。
+
+## 2026-10-11：生产部署与真实协议、控制台联调
+
+部署应用基于主分支 `e30260d`，运行版本 `0.1.0a1`。独立 systemd 进程和 Python 3.12 环境、
+SQLite、独立 MCP/管理员 Token、普通 SSH 目标账户及服务端专用密钥已配置。
+应用只监听回环地址，由现有 Nginx 的独立 HTTPS 端口代理；可信 IP 证书已核验，
+已有续期定时器最近执行成功，其任务包含 Nginx 重载。用户放行云安全组后，公网访问通过。
+
+Docker 基础镜像拉取失败，服务器 Python 镜像源亦缺少部分锁定版本；本次采用原生部署，
+在可联网的构建环境下载目标 Python 3.12 wheel，经 `uv.lock` 导出的版本和哈希校验后离线安装。
+未改变运行依赖版本；生产环境只安装运行依赖与项目 wheel。容器构建仍以既有 CI 为证据。
+
+| 检查 | 本次结果 |
+| --- | --- |
+| 公开 HTTPS | 从开发主机直连控制台返回 200，TLS 证书验证通过；匿名/错误 Token 的 MCP 请求返回 401 |
+| 官方 MCP SDK → HTTPS → SSH | 初始化、清单无凭据字段、标准输出/错误、非零退出码、PTY 状态保留、会话关闭通过 |
+| 远程文件与 Shell 校验 | 独立随机临时目录内完成中文创建/修改、Shell 校验、二进制上传下载及清理 |
+| 长任务与重新连接 | 30 秒命令超过单次 25 秒等待上限，另一 MCP 连接能够找回会话并读取完成结果 |
+| 控制台真实浏览器 | Chromium 经公网入口完成登录/刷新/退出、真实 SSH 终端、桌面/手机布局；无页面脚本错误 |
+| 认证边界 | MCP Token 不能访问管理 API；管理员 Token 不能调用 MCP；错误 Host/Origin 被拒绝 |
+| 持久化与运维 | 无运行会话时备份 SQLite/配置，仅重启本服务；重启后清单、认证及 SSH 连接正常；已启用开机启动 |
+| 现有业务复查 | 原网站返回 200，原受保护 MCP 入口返回 401；原代理路由保留 |
+| 本地代码验证 | Python 47 项通过，含真实回环集成测试及新增 HTTPS URL 校验；Ruff、wheel 资源、DOM 和桌面/手机夹具测试通过 |
+
+本次联调脚本见 `scripts/smoke_ssh.py`、`scripts/smoke_http.py`，没有把生产地址、Token、
+SSH 私钥或线上截图提交到仓库。部署实例配置、备份位置和回滚步骤保存在操作者私人交付记录。
+
+Python 3.10 完整测试退出时仍出现 `BaseSubprocessTransport` 的 `Event loop is closed` 警告，
+测试退出码为 0；单独以 [Issue #8](https://github.com/cytlabs/ssh-mcp/issues/8) 跟踪，未隐藏异常。
+
+**尚未完成真实 AI 客户端的对话式验收。** SDK 和管理控制台结果不替代该验收，因此
+[Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 保持打开。ChatGPT OAuth 仍待实现（#2）。
 
 ## 2026-10-11：DOM 测试稳定性修复
 
@@ -70,7 +102,7 @@ Ruff 0.16.10、pip-audit 2.10.1；完整安装日志在对应任务中。
 
 ## 本地检查与 CI 修复记录
 
-当前受限开发环境已通过 35 项 Python 测试；由于本地未安装运行依赖，集成模块明确跳过。
+早期受限开发环境通过 35 项 Python 测试；由于本地未安装运行依赖，集成模块明确跳过。
 本地还通过 DOM 流程、脚本语法、Markdown 本地链接、配置 YAML 和 Git 差异格式检查。
 本地无法创建监听 socket 或启动 Chromium，相关真实验证已转移到正常联网的 GitHub 托管运行器。
 
@@ -78,15 +110,12 @@ Ruff 0.16.10、pip-audit 2.10.1；完整安装日志在对应任务中。
 第二轮发现 Python 3.10 运行器预装 `setuptools 79.0.1` 被依赖审计标记；
 CI 现显式安装修复版本（要求 `>=83.0.0`），第三轮审计通过。未忽略该告警。
 
-## 尚未完成的生产验收
+## 尚未完成的客户端验收
 
-已尝试连接操作者授权的生产目标，但本地 socket 创建立即返回 `Operation not permitted`，
-沙箱外执行申请也被会话策略拒绝。连接没有建立，未执行远程命令或修改服务器。
-[低影响 SSH 联调脚本](live-ssh-check.md) 已准备，其清理范围单元测试已通过，但未在真实生产目标运行。
-
-没有部署公开云端入口，也没有完成真实 AI 客户端验收。需要经部署后的 HTTPS 入口执行
-[客户端验收步骤](clients.md#acceptance-walkthrough)，记录版本、结果和限制，不提交凭据或私人输出。
-该项由 [Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 跟踪。
+SSH 权限问题已解决，生产部署和真实协议、控制台检查结果见本文最新记录。
+剩余工作是通过已部署公开 HTTPS 入口，使用真实 AI 客户端完成
+[对话式验收步骤](clients.md#acceptance-walkthrough)。
+该项仍由 [Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 跟踪，不能仅依据 SDK 测试关闭。
 
 ChatGPT 所需的 OAuth 接入尚未实现，见 [Issue #2](https://github.com/cytlabs/ssh-mcp/issues/2)。
 Bearer 客户端验收通过也不能关闭 OAuth 待办。
