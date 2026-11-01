@@ -109,7 +109,7 @@ class OAuth:
                 cid, method = basic_id, "client_secret_basic"
             except (ValueError, UnicodeError):
                 raise AuthError("invalid_client", 401) from None
-        elif secret is not None:
+        elif secret not in (None, ""):
             method = "client_secret_post"
         client = self.store.client(cid)
         if (not client or client["method"] != method

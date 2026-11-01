@@ -22,6 +22,11 @@ GRANT_SECONDS = 30 * 86400
 COOKIE_SECONDS = 8 * 3600
 
 
+def _scope_supported(value: object) -> bool:
+    # 可选 scope 的缺省、null 和空串都只表示使用本服务的固定权限。
+    return value is None or (isinstance(value, str) and value in ("", SCOPE))
+
+
 class AuthError(ValueError):
     def __init__(self, code="invalid_request", status=400):
         self.code, self.status = code, status
@@ -237,7 +242,7 @@ class IdentityStore:
                 or not isinstance(data.get("grant_types", []), list)
                 or any(v not in ("authorization_code", "refresh_token")
                        for v in data.get("grant_types", ["authorization_code", "refresh_token"]))
-                or data.get("scope", SCOPE) != SCOPE):
+                or not _scope_supported(data.get("scope"))):
             raise AuthError("invalid_client_metadata")
         cid, secret = secrets.token_urlsafe(24), secrets.token_urlsafe(32)
         with self.transaction():
@@ -263,9 +268,10 @@ class IdentityStore:
         if (params.get("response_type") != "code" or params.get("code_challenge_method") != "S256"
                 or not re.fullmatch(r"[A-Za-z0-9_-]{43}", params.get("code_challenge", ""))):
             raise AuthError("invalid_request")
-        if params.get("resource") != self.resource:
+        # RFC 8707 的 resource 可省略；单资源服务仍将授权绑定到自身。
+        if params.get("resource", self.resource) != self.resource:
             raise AuthError("invalid_target")
-        if params.get("scope", SCOPE) != SCOPE:
+        if not _scope_supported(params.get("scope")):
             raise AuthError("invalid_scope")
         state = params.get("state")
         if state is not None and len(state) > 2048:
@@ -350,7 +356,7 @@ class IdentityStore:
                                       (digest(data.get("refresh_token", "")), cid)).fetchone()
                 if not row or row["expires"] <= time.time():
                     raise AuthError("invalid_grant")
-                if data.get("scope", SCOPE) != SCOPE:
+                if not _scope_supported(data.get("scope")):
                     raise AuthError("invalid_scope")
                 table = "tokens"
             else:

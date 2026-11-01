@@ -1,4 +1,4 @@
-"""Same-origin operator console; admin credentials never authorize MCP requests."""
+"""同源管理台；管理员凭据与 MCP 工具权限分离。"""
 
 from __future__ import annotations
 
@@ -54,6 +54,19 @@ class Console:
         if scope["type"] != "http":
             return await self.mcp_app(scope, receive, send)
         path = scope["path"]
+        if path == "/":
+            accept = b",".join(value.lower() for key, value in scope.get("headers", [])
+                               if key.lower() == b"accept")
+            protocol_request = scope["method"] in ("POST", "DELETE", "OPTIONS") or (
+                scope["method"] == "GET"
+                and any(value in accept for value in (b"application/json", b"text/event-stream"))
+            )
+            if protocol_request:
+                if not self.trusted(scope):
+                    return await self.respond(send, 403, {"error": "请求来源不受信任"})
+                # 与 OpenViking 的根地址分流一致，保留 MCP 的认证挑战和请求体。
+                mcp_scope = {**scope, "path": "/mcp", "raw_path": b"/mcp"}
+                return await self.mcp_app(mcp_scope, receive, send)
         if path == "/auth/session" and scope["method"] == "GET":
             return await self.respond(send, 200, {"mode": "token"})
         if path not in ("/", "/console", "/console/") and not path.startswith(("/console/", "/admin/")):

@@ -67,11 +67,14 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
-    async def code(self, client, **values):
-        response = await self.client.get("/oauth/authorize", params={
+    async def code(self, client, *, include_resource=True, **values):
+        params = {
             "client_id": client["client_id"], "redirect_uri": REDIRECT,
             "response_type": "code", "code_challenge_method": "S256", "code_challenge": CHALLENGE,
-            "resource": RESOURCE, "state": "state-fixture", **values})
+            "resource": RESOURCE, "state": "state-fixture", **values}
+        if not include_resource:
+            params.pop("resource")
+        response = await self.client.get("/oauth/authorize", params=params)
         self.assertEqual(response.status_code, 302, response.text)
         handle = parse_qs(urlsplit(response.headers["location"]).query)["authorize"][0]
         info = await self.client.get("/auth/consent", params={"request": handle})
@@ -102,6 +105,65 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
             self.assertNotIn("access-control-allow-credentials", response.headers)
         response = await self.client.get("/auth/session", headers={"Host": "evil.example"})
         self.assertEqual(response.status_code, 403)
+
+    async def test_registration_defaults_null_and_empty_scope_without_widening_access(self):
+        # 对齐标准客户端的可选字段；未指定权限只授予本服务的固定范围。
+        for scope in (None, "", "ssh:access"):
+            with self.subTest(scope=scope):
+                registered = await self.register(scope=scope)
+                self.assertEqual(registered["scope"], "ssh:access")
+        for scope in (False, 0, [], "ssh:access other"):
+            with self.subTest(invalid_scope=scope):
+                response = await self.client.post("/oauth/register", json={
+                    "redirect_uris": [REDIRECT], "scope": scope})
+                self.assertEqual(response.status_code, 400)
+
+    async def test_authorization_without_resource_still_binds_grant_and_token_to_server(self):
+        await self.login()
+        client = await self.register()
+        code = await self.code(client, include_resource=False)
+        rejected = await self.exchange(client, code, resource="https://other.example/mcp")
+        self.assertEqual(rejected.status_code, 400)
+        response = await self.exchange(client, code)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual((await self.access(response.json()["access_token"])).status_code, 200)
+        grant = self.store.db.execute("SELECT resource FROM grants").fetchone()
+        self.assertEqual(grant["resource"], RESOURCE)
+
+    async def test_public_client_accepts_empty_secret_but_not_confidential_credentials(self):
+        await self.login()
+        client = await self.register(token_endpoint_auth_method="none")
+        code = await self.code(client)
+        rejected = await self.exchange(client, code, client_secret="unexpected-secret")
+        self.assertEqual(rejected.status_code, 401)
+        response = await self.exchange(client, code, client_secret="")
+        self.assertEqual(response.status_code, 200)
+        revoked = await self.client.post("/oauth/revoke", data={
+            "client_id": client["client_id"], "client_secret": "",
+            "token": response.json()["refresh_token"]})
+        self.assertEqual(revoked.status_code, 200)
+        self.assertEqual((await self.access(response.json()["access_token"])).status_code, 401)
+
+    async def test_root_distinguishes_browser_from_authenticated_mcp_requests(self):
+        page = await self.client.get("/", headers={"Accept": "text/html"})
+        self.assertEqual(page.status_code, 200)
+        missing = await self.client.post("/", json={}, headers={
+            "Accept": "application/json, text/event-stream"})
+        self.assertEqual(missing.status_code, 401)
+        self.assertIn("resource_metadata", missing.headers["www-authenticate"])
+        stream = await self.client.get("/", headers={"Accept": "text/event-stream"})
+        self.assertEqual(stream.status_code, 401)
+        await self.login()
+        client = await self.register()
+        response = await self.exchange(client, await self.code(client))
+        headers = {"Authorization": "Bearer " + response.json()["access_token"],
+                   "Accept": "application/json, text/event-stream"}
+        reply = await self.client.post("/", json={}, headers=headers)
+        self.assertEqual(reply.status_code, 200)
+        self.assertTrue(reply.json()["mcp"])
+        blocked = await self.client.post("/", json={}, headers={
+            **headers, "Origin": "https://evil.example"})
+        self.assertEqual(blocked.status_code, 403)
 
     async def test_full_flow_refresh_revoke_and_separate_admin_identity(self):
         login = await self.login()

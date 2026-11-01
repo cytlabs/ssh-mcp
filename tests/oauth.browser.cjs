@@ -19,7 +19,8 @@ const origin = "https://127.0.0.1:18766";
       fixture.stdout.once("data", (data) => { setupURL = JSON.parse(data.toString()).setup_url; clearTimeout(timer); resolve(); });
       fixture.once("exit", () => { clearTimeout(timer); reject(new Error("OAuth 夹具退出")); });
     });
-    browser = await chromium.launch({ headless: true });
+    browser = await chromium.launch({ headless: true,
+      executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined });
     const context = await browser.newContext({ ignoreHTTPSErrors: true, viewport: { width: 1440, height: 960 } });
     const page = await context.newPage(), errors = [];
     page.on("pageerror", (e) => errors.push(e.message));
@@ -47,12 +48,12 @@ const origin = "https://127.0.0.1:18766";
     await page.locator("#app-view").waitFor({ state: "visible" });
     const client = await (await context.request.post(origin + "/oauth/register", { data: {
       client_name: "浏览器验收客户端 <script>", redirect_uris: ["http://127.0.0.1:19999/callback"],
-      token_endpoint_auth_method: "none",
+      token_endpoint_auth_method: "none", scope: null,
     } })).json();
     const verifier = "v".repeat(64);
     const query = new URLSearchParams({ client_id: client.client_id, redirect_uri: client.redirect_uris[0],
       response_type: "code", code_challenge_method: "S256", code_challenge: crypto.createHash("sha256").update(verifier).digest("base64url"),
-      resource: origin + "/mcp", state: "browser-test-state" });
+      state: "browser-test-state" });
     await page.goto(origin + "/oauth/authorize?" + query);
     await page.locator("#consent-view").waitFor({ state: "visible" });
     assert.ok((await page.locator("#consent-client").textContent()).includes("<script>"));
@@ -75,7 +76,7 @@ const origin = "https://127.0.0.1:18766";
     assert.equal(callback.searchParams.get("state"), "browser-test-state");
     const pairResponse = await context.request.post(origin + "/oauth/token", { form: {
       client_id: client.client_id, grant_type: "authorization_code", code: callback.searchParams.get("code"),
-      redirect_uri: client.redirect_uris[0], code_verifier: verifier, resource: origin + "/mcp",
+      redirect_uri: client.redirect_uris[0], code_verifier: verifier, resource: origin + "/mcp", client_secret: "",
     } });
     assert.equal(pairResponse.status(), 200);
     const pair = await pairResponse.json();
@@ -85,6 +86,11 @@ const origin = "https://127.0.0.1:18766";
       protocolVersion: "2025-11-25", capabilities: {}, clientInfo: { name: "browser-acceptance", version: "1" },
     } } });
     assert.equal(mcp.status(), 200);
+    const rootMcp = await context.request.post(origin + "/", { headers: {
+      Authorization: "Bearer " + pair.access_token, Accept: "application/json, text/event-stream",
+    }, data: { jsonrpc: "2.0", id: 2, method: "tools/list" } });
+    assert.equal(rootMcp.status(), 200);
+    assert.ok((await rootMcp.json()).result.tools.some((tool) => tool.name === "list_servers"));
     await page.goto(origin + "/console");
     await page.locator("#app-view").waitFor({ state: "visible" });
     await page.locator("[data-view=clients]").click();
