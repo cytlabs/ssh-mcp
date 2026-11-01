@@ -30,7 +30,8 @@ jobs:
           SSH_MCP_REQUIRE_INTEGRATION: "1"
       - run: uv run --no-sync python -m build --no-isolation
       - run: uv run --no-sync python scripts/check_wheel.py
-      - run: uv run --no-sync pip-audit
+      - name: 在独立工具环境审计当前测试依赖
+        run: uvx --python 3.12 --from pip-audit==2.10.1 pip-audit --path ".venv/lib/python${{ matrix.python }}/site-packages"
       - name: 记录构建环境和依赖
         run: |
           mkdir -p build-record
@@ -64,12 +65,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "24"
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.23"
+      - run: uv sync --locked
       - run: node --version && npm --version
       - run: npm ci
       - run: npm audit
       - run: npm run test:ui
       - run: npx playwright install --with-deps chromium
       - run: npm run test:browser
+      - name: 验证 OAuth 浏览器登录与授权
+        run: uv run --no-sync npm run test:oauth-browser
       - uses: actions/upload-artifact@v4
         if: always()
         with:
