@@ -1,11 +1,5 @@
 # 放入现有 Nginx 的 http 上下文（例如 sites-available），只启用一个副本。
 # 替换域名、证书路径和端口；public_url 必须与下方公开 HTTPS 源完全一致。
-map $http_origin $ssh_mcp_origin_allowed {
-    default 0;
-    "" 1;
-    "https://ssh-mcp.example.com:8443" 1;
-}
-
 server {
     listen 8443 ssl;
     server_name ssh-mcp.example.com;
@@ -16,7 +10,7 @@ server {
     access_log off;
     client_max_body_size 2m;
     if ($http_host != "ssh-mcp.example.com:8443") { return 403; }
-    if ($ssh_mcp_origin_allowed = 0) { return 403; }
+    # 来源校验由应用执行：管理接口严格同源，OAuth 公共端点允许无 Cookie 的 CORS。
 
     location / {
         proxy_pass http://127.0.0.1:18080;
