@@ -11,6 +11,11 @@ const escapeHTML = (value) =>
   );
 const storageKey = "ssh-mcp.console.admin";
 const titles = {
+  dashboard: [
+    "概览",
+    "SYSTEM OVERVIEW",
+    "查看 MCP 连接、远程服务器和会话状态。AI 任务仍在客户端执行。",
+  ],
   servers: [
     "服务器",
     "SERVER INVENTORY",
@@ -39,7 +44,7 @@ let authMode = "token", csrf = "", initialized = true, grants = [];
 let authorizationRequest = new URLSearchParams(location.search).get("authorize");
 let token = "",
   epoch = 0,
-  view = "servers",
+  view = "dashboard",
   state = null,
   selected = null,
   selectedSession = null;
@@ -223,11 +228,50 @@ function render() {
       ),
     );
   ({
+    dashboard: renderDashboard,
     servers: renderServers,
     sessions: renderSessions,
     clients: renderClients,
     activity: renderActivity,
   })[view]();
+}
+function renderDashboard() {
+  const servers = state.servers || [];
+  const sessions = state.sessions || [];
+  const running = sessions.filter((s) => s.status === "running");
+  const recent = (state.activity || []).slice(0, 5);
+  const summary = (name, value, note, symbol) =>
+    `<div class="overview-stat"><span class="overview-stat-icon" aria-hidden="true">${symbol}</span><strong>${value}</strong><span>${name}</span><small>${note}</small></div>`;
+  $("#page-content").innerHTML = `
+    <section class="overview-hero">
+      <span class="overview-kicker"><span class="status-dot"></span>REMOTE ACCESS GATEWAY</span>
+      <h2>让 AI 安全连接你的服务器。</h2>
+      <p>通过 MCP 向可信 AI 客户端提供 SSH 能力。这里负责连接与观察，不在网页里执行 AI 对话。</p>
+      <button class="secondary" data-view-link="clients">查看 MCP 接入配置 <span aria-hidden="true">↗</span></button>
+    </section>
+    <section class="overview-stats" aria-label="连接概况">
+      ${summary("已配置服务器", servers.length, "不代表连接已验证", "▤")}
+      ${summary("运行中会话", running.length, "当前服务实例", "⌁")}
+      ${summary("历史操作", (state.activity || []).length, "最近保留记录", "◷")}
+    </section>
+    <div class="overview-columns">
+      <section class="overview-section">
+        <div class="overview-heading"><h2>远程服务器</h2><button class="text-link" data-view-link="servers">管理服务器 ↗</button></div>
+        <div class="overview-hosts">
+          ${servers.length ? servers.slice(0, 6).map(s => {
+            const probe = probes.get(s.id);
+            return `<div class="overview-host"><span class="overview-host-icon">▤</span><span><strong>${escapeHTML(s.id)}</strong><small>${escapeHTML(s.host)}:${s.port}</small></span>${badge(probe?.type || "", probe?.text || "未检测")}</div>`;
+          }).join("") : '<div class="overview-empty">尚未配置服务器。请先添加 SSH 连接。</div>'}
+        </div>
+      </section>
+      <section class="overview-section">
+        <div class="overview-heading"><h2>最近活动</h2><button class="text-link" data-view-link="activity">查看记录 ↗</button></div>
+        <div class="overview-events">
+          ${recent.length ? recent.map(a => `<div class="overview-event"><span class="event-bullet"></span><div><strong>${escapeHTML(a.action || a.event || a.type || "管理操作")}</strong><small>${escapeHTML(a.server_id || a.target || a.detail || "")}</small></div><time>${escapeHTML(String(a.created_at || a.timestamp || ""))}</time></div>`).join("") : '<div class="overview-empty">暂无管理活动记录。</div>'}
+        </div>
+        <div class="overview-access"><span>⌘</span><div><strong>MCP 客户端接入</strong><p>复制连接配置到 Codex、Claude Code 或 Cursor。</p></div><button class="text-link" data-view-link="clients">查看 ↗</button></div>
+      </section>
+    </div>`;
 }
 function renderServers() {
   const running = state.sessions.filter((s) => s.status === "running").length;
