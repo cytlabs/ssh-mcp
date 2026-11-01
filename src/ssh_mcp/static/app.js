@@ -585,6 +585,8 @@ document.addEventListener("click", (event) => {
     $(`#${close.dataset.close}`).close();
     return;
   }
+  const link = event.target.closest("[data-view-link]");
+  if (link && state) { view = link.dataset.viewLink; render(); return; }
   const nav = event.target.closest("[data-view]");
   if (nav) {
     if (!state) {
