@@ -1599,3 +1599,23 @@ dialog {background:#101c2c;color:#eaf2ff;border:1px solid #30435b;border-radius:
 .overview-access button {margin-left:auto;white-space:nowrap}
 @media(max-width:1100px){.overview-columns{grid-template-columns:1fr}.overview-hero{min-height:235px}}
 @media(max-width:700px){main{padding:25px 17px}.overview-hero{padding:30px 24px;min-height:260px}.overview-hero h2{font-size:24px}.overview-stats{grid-template-columns:1fr;gap:10px}.overview-stat{min-height:100px}.overview-columns{grid-template-columns:minmax(0,1fr)}.overview-section{padding:16px}.overview-event time{max-width:76px;overflow:hidden;text-overflow:ellipsis}}
+
+
+/* Preserve the original compact mobile navigation without horizontal overflow. */
+@media(max-width:700px){
+  .sidebar{position:relative;inset:auto;width:100%;padding:15px 14px;border-right:0;border-bottom:1px solid #23344a}
+  .workspace{margin-left:0;min-height:calc(100vh - 120px);width:100%;min-width:0}
+  .sidebar .brand{font-size:18px}
+  .sidebar .workspace-label,.sidebar .nav-caption,.sidebar .sidebar-bottom{display:none}
+  .sidebar nav{display:flex;flex-wrap:wrap;gap:6px;margin-top:15px}
+  .sidebar nav button{padding:8px 10px;font-size:11px;flex:0 1 auto;white-space:nowrap}
+  .topbar{padding:0 17px}
+  main{width:100%;min-width:0}
+  .overview-hero,.overview-section,.overview-stat{min-width:0}
+  .overview-host{min-width:0}
+  .overview-host>span:nth-child(2){min-width:0;overflow-wrap:anywhere}
+  .overview-event{min-width:0}
+  .overview-event>div{min-width:0;overflow-wrap:anywhere}
+  .overview-access{flex-wrap:wrap}
+  .content-split,.session-layout{min-width:0}
+}
