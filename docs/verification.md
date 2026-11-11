@@ -1,6 +1,6 @@
 # 验证记录
 
-最近更新：2026-10-11。版本：`0.1.0a1`（开发预览，未发布正式版本）。
+历史验证记录起始于 2026-10-11；下文各项结果对应当时版本，并非最新提交的自动验收结论。版本：`0.1.0a1`（开发预览，未发布正式版本）。
 
 ## 2026-10-11：生产部署与真实协议、控制台联调
 
@@ -32,7 +32,7 @@ Python 3.10 完整测试退出时仍出现 `BaseSubprocessTransport` 的 `Event 
 测试退出码为 0；单独以 [Issue #8](https://github.com/cytlabs/ssh-mcp/issues/8) 跟踪，未隐藏异常。
 
 **尚未完成真实 AI 客户端的对话式验收。** SDK 和管理控制台结果不替代该验收，因此
-[Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 保持打开。ChatGPT OAuth 仍待实现（#2）。
+[Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 保持打开。此处为当时记录；后续已实现 OAuth 协议，但真实客户端对话式验收仍需单独核实。
 
 ## 2026-10-11：DOM 测试稳定性修复
 
@@ -117,7 +117,7 @@ SSH 权限问题已解决，生产部署和真实协议、控制台检查结果�
 [对话式验收步骤](clients.md#acceptance-walkthrough)。
 该项仍由 [Issue #1](https://github.com/cytlabs/ssh-mcp/issues/1) 跟踪，不能仅依据 SDK 测试关闭。
 
-ChatGPT 所需的 OAuth 接入尚未实现，见 [Issue #2](https://github.com/cytlabs/ssh-mcp/issues/2)。
+此处为早期记录；后续已实现原生 OAuth 协议，ChatGPT/Codex 的实际客户端验收仍需核实，见 [Issue #2](https://github.com/cytlabs/ssh-mcp/issues/2)。
 Bearer 客户端验收通过也不能关闭 OAuth 待办。
 源码已提交 GitHub；未发布 PyPI 安装包、正式镜像或 Release。
 首次正式发布准备见 [Issue #4](https://github.com/cytlabs/ssh-mcp/issues/4)。

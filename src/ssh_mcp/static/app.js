@@ -669,7 +669,7 @@ function configureLogin() {
   const submit = $("#login-form button[type=submit]");
   submit.hidden = locked;
   submit.textContent = setup ? "创建账号并进入控制台" : "进入控制台";
-  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "登录 Portlane";
+  $("#login-title").textContent = locked ? "请使用初始化链接" : setup ? "创建管理员账号" : "登录 SSH-MCP";
   $("#login-description").textContent = locked ? "当前还没有管理员账号。请打开部署时生成的完整初始化链接，再创建用户名和密码。" : oauth ? (setup ? "设置用户名和密码，即可开始使用。" : "使用用户名和密码登录。") : "使用管理员 Token 登录。";
   $("#password-label").textContent = oauth ? (setup ? "设置密码" : "密码") : "管理员 Token";
   const input = $("#admin-token");
@@ -751,7 +751,8 @@ window.addEventListener("hashchange", () => {
 });
 startLogin();
 
-const themeStoreKey = "portlane.theme";
+const themeStoreKey = "ssh-mcp.theme";
+const legacyThemeStoreKey = "portlane.theme";
 function applyTheme(next) {
   document.body.dataset.theme = next;
   for (const id of ["#theme-toggle","#login-theme-toggle"]) {
@@ -762,7 +763,7 @@ function applyTheme(next) {
   }
 }
 let storedTheme = "";
-try { storedTheme = localStorage.getItem(themeStoreKey) || ""; } catch {}
+try { storedTheme = (localStorage.getItem(themeStoreKey) || localStorage.getItem(legacyThemeStoreKey)) || ""; } catch {}
 const wantsDark = typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches;
 applyTheme(["light","dark"].includes(storedTheme) ? storedTheme : wantsDark ? "dark" : "light");
 function toggleTheme() {
