@@ -1,6 +1,6 @@
 # Web 管理控制台
 
-Portlane 的控制台位于 `/console`，跟随 Python 服务一起分发，提供概览、服务器管理、操作记录和 MCP 接入。
+SSH-MCP 的控制台位于 `/console`，跟随 Python 服务一起分发，提供概览、服务器管理、操作记录和 MCP 接入。
 
 ## 界面
 
