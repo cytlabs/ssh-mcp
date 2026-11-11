@@ -10,7 +10,7 @@ SQLite 管理操作记录不会保存 Shell 命令正文或输出。这样可降
 
 ## 我已经添加服务器，为什么 AI 连不上？
 
-检查：MCP URL 是公开的可信 HTTPS 地址；客户端成功完成 OAuth 授权或配置静态 Token；主机地址、端口、登录用户和认证文件在 **Portlane 服务端** 可访问；`known_hosts` 已核验。先在控制台测试 SSH 连接，再根据 [客户端接入](clients.md) 验证 `list_servers`。
+检查：MCP URL 是公开的可信 HTTPS 地址；客户端成功完成 OAuth 授权或配置静态 Token；主机地址、端口、登录用户和认证文件在 **SSH-MCP 服务端** 可访问；`known_hosts` 已核验。先在控制台测试 SSH 连接，再根据 [客户端接入](clients.md) 验证 `list_servers`。
 
 ## 如何重置管理员密码？
 
