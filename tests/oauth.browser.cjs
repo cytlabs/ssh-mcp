@@ -105,7 +105,7 @@ const origin = "https://127.0.0.1:18766";
     await page.locator("#logout").click();
     await page.locator("#login-view").waitFor({ state: "visible" });
     await page.reload();
-    await page.getByRole("heading", { name: "登录 Portlane" }).waitFor();
+    await page.getByRole("heading", { name: "登录 SSH-MCP" }).waitFor();
     await page.locator("#username").fill("admin");
     await page.locator("#admin-token").fill(password);
     await page.locator("#login-form button[type=submit]").click();
