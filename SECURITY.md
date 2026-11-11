@@ -1,6 +1,6 @@
 # 安全说明与漏洞反馈
 
-产品名称为 Portlane；底层 Python 包、CLI 与协议仍沿用 SSH MCP 命名。网页主题和 Logo 不改变认证边界。
+产品名称为 SSH-MCP；底层 Python 包、CLI 与协议仍沿用 SSH MCP 命名。网页主题和 Logo 不改变认证边界。
 
 ## 信任模型
 
