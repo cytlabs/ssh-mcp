@@ -132,7 +132,7 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
     async def test_static_shell_is_public_but_has_no_inventory(self):
         status, body, headers = await self.request("/console", token=None)
         self.assertEqual(status, 200)
-        self.assertIn("Portlane".encode(), body)
+        self.assertIn("SSH-MCP".encode(), body)
         self.assertIn(b"frame-ancestors 'none'", headers[b"content-security-policy"])
         self.assertNotIn(ADMIN.encode(), body)
         self.assertEqual((await self.request("/console/../../config.json", token=None))[0], 404)
