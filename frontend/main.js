@@ -1,4 +1,4 @@
-import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, activityColumns, commandColumns } from "./components.js";
+import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, activityColumns, mountCommands } from "./components.js";
 const navigation = mountNavigation(document.querySelector(".sidebar nav"));
 
 const $ = (selector) => document.querySelector(selector);
@@ -465,6 +465,7 @@ function renderSettings() {
   });
 }
 function renderCommands(before = null, previous = [], search = "", day = "") {
+  releasePage();
   const panel = document.createElement("section");
   panel.className = "list-page command-ledger";
   panel.innerHTML = `<form class="list-toolbar">
@@ -495,7 +496,7 @@ function renderCommands(before = null, previous = [], search = "", day = "") {
       return;
     }
     results.innerHTML = '<div class="vue-table"></div><div class="pager"><span class="pager-meta">本页 ' + data.rows.length + ' 条 · 第 ' + (previous.length + 1) + ' 页</span><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
-    mountTable(results.querySelector(".vue-table"), data.rows, commandColumns);
+    mountCommands(results.querySelector(".vue-table"), data.rows);
     $("#audit-prev").disabled = !previous.length;
     $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0,-1), search, day);
     $("#audit-next").disabled = !data.more;

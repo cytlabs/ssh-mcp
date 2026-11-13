@@ -51,6 +51,32 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator("#login-form button[type=submit]").click();
     await page.locator("#app-view").waitFor({ state: "visible" });
     await page.locator(".overview-stats").waitFor();
+    const script = "set -eu\r\ncd /opt/example\r\npython3 -m unittest\r\necho '<b>test</b>'\r\n";
+    const auditRow = { operator: "fixture", server_id: "dev", timestamp: "2026-11-14T01:00:00Z", event: "command" };
+    await page.route("**/admin/command-audit?**", route => {
+      const second = new URL(route.request().url()).searchParams.has("before");
+      return route.fulfill({json: {enabled: true, more: !second, rows: second
+        ? [{...auditRow, id: 1, content: "pwd"}]
+        : [{...auditRow, id: 3, content: script}, {...auditRow, id: 2, content: "hostname"}]}});
+    });
+    await page.locator("[data-view=commands]").click();
+    await page.locator(".command-preview").first().click();
+    const reader = page.locator(".command-reader");
+    assert.equal(await reader.locator(".source-line").count(), 4);
+    assert.equal(await reader.locator("xpath=..").getAttribute("colspan"), "4");
+    assert.equal(await reader.locator(".source-line code").last().textContent(), "echo '<b>test</b>'");
+    await reader.getByLabel("自动换行").uncheck();
+    assert.equal(await reader.locator(".wrapped").count(), 0);
+    await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+    await reader.getByText("复制原文", {exact:true}).click();
+    assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g,"\n"), script.replace(/\r\n/g,"\n"));
+    await page.locator(".command-preview").last().click();
+    assert.equal(await reader.count(), 1);
+    await page.locator("#audit-next").click();
+    await page.locator(".command-preview").filter({hasText:"pwd"}).waitFor();
+    assert.equal(await reader.count(), 0);
+    await page.locator("#audit-prev").click();
+    await page.locator(".command-preview").filter({hasText:"python3 -m unittest"}).waitFor();
     assert.equal(await page.locator("nav button[data-view=clients] + button").getAttribute("data-view"), "settings");
     assert.equal(await page.locator("#theme-toggle + #account-menu").count(), 1);
     assert.ok(await page.locator(".brand img").evaluate(img => img.complete && img.naturalWidth > 0));

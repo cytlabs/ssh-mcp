@@ -197,9 +197,30 @@ body:not(.authenticated) .login-view{min-height:100vh}
 
 .login-theme-toggle{position:absolute;top:20px;right:22px}.login-view{position:relative}
 
-.command-ledger td:last-child{max-width:42ch}
-.command-ledger summary,.command-ledger pre{font-family:var(--mono);cursor:pointer;white-space:pre-wrap}
-.command-ledger pre{max-height:16rem;overflow:auto}
+.command-ledger table{table-layout:fixed}
+.command-ledger th:nth-child(1){width:19%}
+.command-ledger th:nth-child(2){width:18%}
+.command-ledger th:nth-child(3){width:23%}
+.command-ledger .reading td{background:var(--accent-soft)}
+.command-ledger .command-preview{display:grid;grid-template-columns:12px minmax(0,1fr);align-items:baseline;gap:0 6px;text-align:left;width:100%;padding:4px 0}
+.command-preview code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.command-preview small{grid-column:2}
+.preview-arrow,.reader-count{color:var(--muted)}
+.command-ledger td[colspan]{padding:0;height:auto;background:var(--paper)}
+.reader-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--sidebar);border-bottom:1px solid var(--line);padding:10px 16px}
+.reader-toolbar label{display:inline-flex;align-items:center;gap:6px;margin-left:auto}
+.reader-toolbar .secondary{min-height:32px}
+.reader-source{padding:10px 0;overflow-x:auto;font:15px/1.7 var(--mono);tab-size:4}
+.source-line{display:grid;grid-template-columns:4.5ch max-content}
+.wrapped .source-line{grid-template-columns:4.5ch minmax(0,1fr)}
+.line-number{user-select:none;text-align:right;padding-right:1ch;border-right:1px solid var(--line);color:var(--muted)}
+.source-line code{padding:0 14px;white-space:pre}
+.wrapped .source-line code{white-space:pre-wrap;overflow-wrap:anywhere}
+.syntax-command{color:var(--accent-text)}
+.syntax-string{color:var(--green)}
+.syntax-option{color:var(--red)}
+.command-reader>[role=status]:not(:empty),.command-reader>.text-link{display:inline-block;margin:4px 16px 12px}
+@media(max-width:800px){.command-ledger .table-wrap table{min-width:780px}}
 .command-ledger small{display:block;color:var(--muted)}
 .account-settings{display:grid;gap:16px;max-width:560px;padding:24px}
 .account-settings h2,.account-settings p{margin:0}
