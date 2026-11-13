@@ -14,6 +14,7 @@ from typing import Literal
 import asyncssh
 
 from .buffer import OutputBuffer
+from .command_audit import record_dispatch
 from .config import Config, Server, integer
 from .errors import InputError
 
@@ -77,12 +78,15 @@ class SSHManager:
         connection = None
         try:
             connection = await self.connect(server)
+            session_id = uuid.uuid4().hex
+            if command is not None:
+                await asyncio.to_thread(record_dispatch, server_id, session_id, "command", command)
             process = await asyncio.wait_for(connection.create_process(
                 command, term_type="xterm-256color" if pty else None,
                 term_size=(cols, rows), encoding="utf-8", errors="replace",
             ), self.config.connect_timeout)
             terminal = Terminal(
-                id=uuid.uuid4().hex, server_id=server_id, connection=connection,
+                id=session_id, server_id=server_id, connection=connection,
                 process=process, stdout=OutputBuffer(self.config.buffer_chars),
                 stderr=OutputBuffer(self.config.buffer_chars),
                 kind="command" if command is not None else "shell",
@@ -180,6 +184,9 @@ class SSHManager:
         if terminal.status != "running":
             raise InputError("Session is no longer running")
         async with terminal.input_lock:
+            if terminal.kind == "shell" and data:
+                await asyncio.to_thread(record_dispatch, terminal.server_id, terminal.id,
+                                        "shell_input", data)
             terminal.process.stdin.write(data)
             await asyncio.wait_for(terminal.process.stdin.drain(), 10)
             if eof:
