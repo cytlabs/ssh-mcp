@@ -77,3 +77,11 @@ DOM 流程分别覆盖正常启动及延迟 3 秒启动；先等后端发出就�
 ## 依赖与构建记录
 
 见 [可复现安装与构建](docs/reproducible-builds.md)。正常安装使用 `uv sync --locked` 和 `npm ci`，不要自动更新锁文件。
+### Console frontend
+
+Edit the console source in `frontend/`. Vue and unstyled PrimeVue components
+provide the navigation, shared data tables and account settings. The shell
+markup, theme CSS and logo live in `src/ssh_mcp/static/`.
+Run `npm ci`, then `npm run build:ui` and commit the generated
+`src/ssh_mcp/static/app.js` alongside the source. The Python package serves
+the compiled bundle directly.

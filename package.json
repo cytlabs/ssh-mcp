@@ -7,12 +7,16 @@
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "scripts": {
+    "build:ui": "node frontend/build.mjs",
     "test:ui": "node --test tests/console.bridge.test.cjs tests/console.dom.cjs",
     "test:browser": "node tests/console.browser.cjs",
     "test:oauth-browser": "node tests/oauth.browser.cjs"
   },
   "devDependencies": {
+    "esbuild": "^0.25.12",
     "jsdom": "30.1.2",
-    "playwright": "1.63.0"
+    "playwright": "1.63.0",
+    "primevue": "^4.5.5",
+    "vue": "^3.5.45"
   }
 }

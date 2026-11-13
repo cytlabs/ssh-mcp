@@ -13,44 +13,31 @@
 <a class="skip-link" href="#main">跳转到内容</a>
 <aside class="sidebar">
   <a href="/console" class="brand" aria-label="SSH-MCP 首页">
-    <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
-      <rect x="2" y="2" width="44" height="44" rx="13" fill="#24292f"/>
-      <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="21.5" cy="31" r="3" fill="#fd8c73"/>
-    </svg>
+    <img class="logo-mark" src="/console/logo.svg" alt="">
     <span>SSH-MCP</span>
   </a>
-  <nav aria-label="主导航">
-    <button data-view="dashboard" aria-current="page"><span class="nav-icon" aria-hidden="true">⌂</span>概览</button>
-    <button data-view="servers"><span class="nav-icon" aria-hidden="true">▤</span>服务器<span id="nav-count" class="nav-count">—</span></button>
-    <button data-view="activity"><span class="nav-icon" aria-hidden="true">◷</span>操作记录</button>
-    <button data-view="commands"><span class="nav-icon" aria-hidden="true">⌘</span>命令审计</button>
-    <button data-view="settings"><span class="nav-icon" aria-hidden="true">⚙</span>设置</button>
-    <button data-view="clients"><span class="nav-icon" aria-hidden="true">⇄</span>MCP 接入</button>
-  </nav>
+  <nav aria-label="主导航"></nav>
   <div class="sidebar-bottom"><span id="version">v0.1.0</span></div>
 </aside>
 <div class="workspace">
   <header class="topbar">
     <strong id="breadcrumb">概览</strong>
+    <div class="topbar-actions">
+    <button id="theme-toggle" class="icon-button" type="button" aria-label="切换主题" title="切换主题">☾</button>
     <details class="account" id="account-menu">
       <summary aria-label="账户菜单"><span id="connection-label" hidden></span><span class="account-chevron" aria-hidden="true"></span></summary>
       <div class="account-actions">
         <button type="button" data-view-link="settings">账号设置</button>
-        <button id="theme-toggle" type="button">切换主题</button>
+
         <button id="logout" type="button" hidden>退出登录</button>
       </div>
-    </details>
+    </details></div>
   </header>
   <main id="main" tabindex="-1">
     <section id="login-view" class="login-view">
       <button id="login-theme-toggle" class="icon-button login-theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">☾</button>
       <div class="login-brand">
-        <svg class="logo-mark large" viewBox="0 0 48 48" aria-hidden="true">
-          <rect x="2" y="2" width="44" height="44" rx="13" fill="#24292f"/>
-          <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="21.5" cy="31" r="3" fill="#fd8c73"/>
-        </svg>
+        <img class="logo-mark large" src="/console/logo.svg" alt="">
         <strong>SSH-MCP</strong>
       </div>
       <form id="login-form" class="login-card">
