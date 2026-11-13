@@ -11,6 +11,7 @@ const escapeHTML = (value) =>
   );
 const storageKey = "ssh-mcp.console.admin";
 const titles = {
+  commands: ["命令审计", "COMMAND AUDIT", "查看发送到服务器的命令和交互输入。"],
   dashboard: [
     "概览",
     "SYSTEM OVERVIEW",
@@ -232,6 +233,7 @@ function render() {
     servers: renderServers,
     clients: renderClients,
     activity: renderActivity,
+    commands: renderCommands,
   })[view]();
 }
 function renderDashboard() {
@@ -432,6 +434,32 @@ function formatTime(value) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("zh-CN", {hour12:false});
 }
 let activityRequestId = 0;
+async function renderCommands(before = null, previous = []) {
+  const panel = document.createElement("section");
+  panel.className = "panel";
+  panel.textContent = "正在加载…";
+  $("#page-content").replaceChildren(panel);
+  try {
+    const data = await api("/command-audit" + (before ? "?before=" + before : ""));
+    if (!panel.isConnected) return;
+    if (!data.rows.length) {
+      panel.textContent = data.enabled ? "暂无命令记录" : "服务端尚未启用命令审计";
+      return;
+    }
+    panel.innerHTML = '<div class="table-wrap"><table><thead><tr><th>时间（本地）</th><th>服务器</th><th>类型</th><th>命令或输入</th></tr></thead><tbody>' +
+      data.rows.map(row => '<tr><td>' + escapeHTML(new Date(row.timestamp).toLocaleString()) +
+        '</td><td>' + escapeHTML(row.server_id) + '</td><td>' +
+        (row.event === "command" ? "命令" : "交互输入") + '</td><td><pre class="audit-command">' +
+        escapeHTML(row.content) + '</pre></td></tr>').join("") +
+      '</tbody></table></div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
+    $("#audit-prev").disabled = !previous.length;
+    $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0, -1));
+    $("#audit-next").disabled = !data.more;
+    $("#audit-next").onclick = () => renderCommands(data.rows.at(-1).id, [...previous, before]);
+  } catch {
+    panel.textContent = "命令审计加载失败，请刷新重试。";
+  }
+}
 function renderActivity() {
   $("#page-content").innerHTML = `
     <section class="panel"><div class="filters activity-filter">

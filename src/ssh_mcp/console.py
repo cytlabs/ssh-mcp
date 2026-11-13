@@ -12,6 +12,7 @@ from datetime import date
 
 from . import __version__
 from .auth import BearerAuth
+from .command_audit import command_history
 from .config import ConfigError
 from .errors import InputError
 from .registry import Conflict
@@ -119,6 +120,11 @@ class Console:
                     "mcp_url": self.manager.config.public_url.rstrip("/") + "/mcp",
                     "auth_mode": self.manager.config.auth_mode,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
+        if method == "GET" and path == "/admin/command-audit":
+            before = int(parse_qs(query.decode()).get("before", [2**63 - 1])[0])
+            if not 0 < before < 2**63:
+                raise InputError("Invalid cursor")
+            return await asyncio.to_thread(command_history, before)
         if method == "GET" and path == "/admin/activity":
             options = parse_qs(query.decode("utf-8"), keep_blank_values=True, max_num_fields=12)
             if any(len(values) != 1 for values in options.values()):
