@@ -434,36 +434,52 @@ function formatTime(value) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("zh-CN", {hour12:false});
 }
 let activityRequestId = 0;
-async function renderCommands(before = null, previous = []) {
+function renderCommands(before = null, previous = [], search = "", day = "") {
   const panel = document.createElement("section");
-  panel.className = "panel";
-  panel.textContent = "正在加载…";
+  panel.className = "command-ledger";
+  panel.innerHTML = `<form class="ledger-filters">
+    <input type="search" aria-label="搜索操作者、服务器或命令" placeholder="搜索操作者、服务器、命令…" maxlength="256">
+    <input type="date" aria-label="本地日期"><button>查询</button></form>
+    <div class="ledger-results" aria-live="polite">正在加载…</div>`;
   $("#page-content").replaceChildren(panel);
-  try {
-    const data = await api("/command-audit" + (before ? "?before=" + before : ""));
+  const form = panel.querySelector("form"), [term, date] = form.querySelectorAll("input");
+  term.value = search;
+  date.value = day;
+  form.onsubmit = e => {
+    e.preventDefault();
+    renderCommands(null, [], term.value.trim(), date.value);
+  };
+  const params = new URLSearchParams({search});
+  if (before) params.set("before", before);
+  if (day) {
+    const start = new Date(day + "T00:00:00"), end = new Date(start);
+    end.setDate(end.getDate() + 1);
+    params.set("start", start.toISOString());
+    params.set("end", end.toISOString());
+  }
+  const results = panel.querySelector(".ledger-results");
+  api("/command-audit?" + params).then(data => {
     if (!panel.isConnected) return;
     if (!data.rows.length) {
-      panel.textContent = data.enabled ? "暂无命令记录" : "服务端尚未启用命令审计";
+      results.textContent = !data.enabled ? "服务端尚未启用命令审计" : "没有符合条件的记录";
       return;
     }
-    panel.innerHTML = '<div class="audit-list">' + data.rows.map(row => {
-      const date = new Date(row.timestamp);
-      return '<article class="audit-entry"><div class="audit-meta"><div><small>操作者</small><strong>' +
-        escapeHTML(row.operator || "未记录") + '</strong></div><div><small>SSH 用户 @ 服务器</small><strong>' +
-        escapeHTML((row.ssh_user || "未记录") + " @ " + row.server_id) +
-        '</strong></div><time>' + escapeHTML(date.toLocaleString()) +
-        '</time></div><details><summary><span>' + (row.event === "command" ? "命令" : "交互输入") +
-        '</span><code>' + escapeHTML(row.content.split("\n")[0] || "查看输入") +
-        '</code></summary><pre class="audit-command">' + escapeHTML(row.content) +
-        '</pre></details></article>';
-    }).join("") + '</div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
+    results.innerHTML = '<div class="table-wrap"><table><thead><tr><th>操作者</th><th>服务器</th><th>时间（本地）</th><th>命令</th></tr></thead><tbody>' +
+      data.rows.map(row => {
+        const content = escapeHTML(row.content);
+        const command = row.content.length > 70 || row.content.includes("\n")
+          ? '<details><summary>' + escapeHTML(row.content.split("\n")[0].slice(0,70) || "查看输入") + '…</summary><pre>' + content + '</pre></details>'
+          : '<code>' + content + '</code>';
+        return '<tr><td><strong>' + escapeHTML(row.operator || "未记录") + '</strong></td><td>' +
+          escapeHTML((row.ssh_user || "未记录") + " @ " + row.server_id) + '</td><td><time>' +
+          escapeHTML(new Date(row.timestamp).toLocaleString("sv-SE")) + '</time></td><td>' +
+          (row.event === "shell_input" ? '<small>交互输入</small>' : '') + command + '</td></tr>';
+      }).join("") + '</tbody></table></div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
     $("#audit-prev").disabled = !previous.length;
-    $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0, -1));
+    $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0,-1), search, day);
     $("#audit-next").disabled = !data.more;
-    $("#audit-next").onclick = () => renderCommands(data.rows.at(-1).id, [...previous, before]);
-  } catch {
-    panel.textContent = "命令审计加载失败，请刷新重试。";
-  }
+    $("#audit-next").onclick = () => renderCommands(data.rows.at(-1).id, [...previous,before], search, day);
+  }).catch(() => { results.textContent = "加载失败，请重新查询。"; });
 }
 function renderActivity() {
   $("#page-content").innerHTML = `

@@ -25,7 +25,7 @@ def record_dispatch(server_id: str, session_id: str, event: str, content: str,
                    (cursor.lastrowid, operator_name.get(), ssh_user))
 
 
-def command_history(before: int) -> dict:
+def command_history(before: int, search="", start="", end="") -> dict:
     path = os.environ.get("SSH_MCP_COMMAND_AUDIT_DB")
     if not path or not Path(path).exists():
         return {"enabled": bool(path), "rows": [], "more": False}
@@ -35,6 +35,15 @@ def command_history(before: int) -> dict:
         identity = db.execute("SELECT 1 FROM sqlite_master WHERE name='command_identity'").fetchone()
         fields = "operator,ssh_user" if identity else "NULL AS operator,NULL AS ssh_user"
         tables = "command_audit LEFT JOIN command_identity USING(id)" if identity else "command_audit"
+        filters = ["id < ?"]
+        params = [before]
+        if search:
+            columns = ["server_id", "content"] + (["operator", "ssh_user"] if identity else [])
+            filters.append("(" + " OR ".join(f"instr(lower({c}),lower(?))" for c in columns) + ")")
+            params.extend([search] * len(columns))
+        if start and end:
+            filters.append("julianday(timestamp) >= julianday(?) AND julianday(timestamp) < julianday(?)")
+            params.extend([start, end])
         rows = db.execute(f"SELECT id,timestamp,server_id,event,content,{fields} FROM {tables} "
-                          "WHERE id < ? ORDER BY id DESC LIMIT 21", (before,)).fetchall()
+                          "WHERE " + " AND ".join(filters) + " ORDER BY id DESC LIMIT 21", params).fetchall()
     return {"enabled": True, "rows": [dict(row) for row in rows[:20]], "more": len(rows) > 20}

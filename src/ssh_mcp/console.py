@@ -121,10 +121,12 @@ class Console:
                     "auth_mode": self.manager.config.auth_mode,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
         if method == "GET" and path == "/admin/command-audit":
-            before = int(parse_qs(query.decode()).get("before", [2**63 - 1])[0])
+            options = parse_qs(query.decode(), max_num_fields=4)
+            before = int(options.get("before", [2**63 - 1])[0])
             if not 0 < before < 2**63:
                 raise InputError("Invalid cursor")
-            return await asyncio.to_thread(command_history, before)
+            return await asyncio.to_thread(command_history, before, options.get("search", [""])[0],
+                                           options.get("start", [""])[0], options.get("end", [""])[0])
         if method == "GET" and path == "/admin/activity":
             options = parse_qs(query.decode("utf-8"), keep_blank_values=True, max_num_fields=12)
             if any(len(values) != 1 for values in options.values()):
