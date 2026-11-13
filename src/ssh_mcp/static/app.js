@@ -281,7 +281,7 @@ function renderDashboard() {
 }
 function renderServers() {
   $("#page-content").innerHTML = `
-    <section class="panel"><div class="toolbar">
+    <section class="list-page"><div class="list-toolbar">
       <label class="search"><span>⌕</span><input id="server-search" type="search" aria-label="搜索服务器" value="${escapeHTML(search)}" placeholder="搜索名称、地址或备注"></label>
       <select id="auth-filter" aria-label="认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select>
       <select id="status-filter" aria-label="连接测试状态"><option value="all">全部状态</option><option value="ok">可连接</option><option value="failed">连接失败</option><option value="untested">未检测</option></select>
@@ -511,10 +511,10 @@ function renderSettings() {
 }
 function renderCommands(before = null, previous = [], search = "", day = "") {
   const panel = document.createElement("section");
-  panel.className = "command-ledger";
-  panel.innerHTML = `<form class="ledger-filters">
+  panel.className = "list-page command-ledger";
+  panel.innerHTML = `<form class="list-toolbar">
     <input type="search" aria-label="搜索操作者、服务器或命令" placeholder="搜索操作者、服务器、命令…" maxlength="256">
-    <input type="date" aria-label="本地日期"><button>查询</button></form>
+    <input type="date" aria-label="本地日期"><button class="primary">查询</button></form>
     <div class="ledger-results" aria-live="polite">正在加载…</div>`;
   $("#page-content").replaceChildren(panel);
   const form = panel.querySelector("form"), [term, date] = form.querySelectorAll("input");
@@ -550,7 +550,7 @@ function renderCommands(before = null, previous = [], search = "", day = "") {
           escapeHTML((row.ssh_user || "未记录") + " @ " + row.server_id) + '</td><td><time>' +
           escapeHTML(new Date(row.timestamp).toLocaleString("sv-SE")) + '</time></td><td>' +
           (row.event === "shell_input" ? '<small>交互输入</small>' : '') + command + '</td></tr>';
-      }).join("") + '</tbody></table></div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
+      }).join("") + '</tbody></table></div><div class="pager"><span class="pager-meta">本页 ' + data.rows.length + ' 条 · 第 ' + (previous.length + 1) + ' 页</span><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
     $("#audit-prev").disabled = !previous.length;
     $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0,-1), search, day);
     $("#audit-next").disabled = !data.more;
@@ -559,7 +559,7 @@ function renderCommands(before = null, previous = [], search = "", day = "") {
 }
 function renderActivity() {
   $("#page-content").innerHTML = `
-    <section class="panel"><div class="filters activity-filter">
+    <section class="list-page"><div class="list-toolbar">
       <label class="search"><span>⌕</span><input type="search" id="activity-search" aria-label="搜索操作" placeholder="搜索操作或服务器" value="${escapeHTML(activitySearch)}"></label>
       <select id="activity-event" aria-label="操作类型"><option value="all">全部操作</option><option value="server">服务器管理</option><option value="connection">连接检测</option><option value="session">MCP 会话</option></select>
       <select id="activity-outcome" aria-label="操作结果"><option value="all">全部结果</option><option value="ok">成功</option><option value="failed">失败</option></select>
@@ -896,7 +896,7 @@ function applyTheme(next) {
   for (const id of ["#theme-toggle","#login-theme-toggle"]) {
     const btn = $(id);
     if (!btn) continue;
-    btn.textContent = next === "dark" ? "☀" : "☾";
+    btn.textContent = id === "#theme-toggle" ? (next === "dark" ? "切换到浅色模式" : "切换到深色模式") : (next === "dark" ? "☀" : "☾");
     btn.setAttribute("aria-label",next === "dark" ? "切换到浅色模式" : "切换到深色模式");
   }
 }
@@ -911,3 +911,14 @@ function toggleTheme() {
 }
 $("#theme-toggle").addEventListener("click",toggleTheme);
 $("#login-theme-toggle").addEventListener("click",toggleTheme);
+
+const accountMenu = $("#account-menu");
+document.addEventListener("click", event => {
+  if (!accountMenu.contains(event.target) || event.target.closest(".account-actions button")) accountMenu.open = false;
+});
+accountMenu.addEventListener("keydown", event => {
+  if (event.key === "Escape") {
+    accountMenu.open = false;
+    accountMenu.querySelector("summary").focus();
+  }
+});

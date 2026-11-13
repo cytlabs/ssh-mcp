@@ -102,6 +102,7 @@ const origin = "https://127.0.0.1:18766";
     await page.locator("[data-revoke]").click();
     await page.locator("#grants-list").getByText(/已撤销/).waitFor();
     assert.equal((await context.request.get(origin + "/mcp", { headers: { Authorization: "Bearer " + pair.access_token } })).status(), 401);
+    await page.locator("#account-menu summary").click();
     await page.locator("#logout").click();
     await page.locator("#login-view").waitFor({ state: "visible" });
     await page.reload();

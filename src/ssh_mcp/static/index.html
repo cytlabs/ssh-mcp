@@ -33,11 +33,14 @@
 <div class="workspace">
   <header class="topbar">
     <strong id="breadcrumb">概览</strong>
-    <div class="account">
-      <span id="connection-label" hidden></span>
-      <button id="theme-toggle" class="icon-button theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">☾</button>
-      <button id="logout" class="text-button" type="button" hidden>退出登录</button>
-    </div>
+    <details class="account" id="account-menu">
+      <summary aria-label="账户菜单"><span id="connection-label" hidden></span><span class="account-chevron" aria-hidden="true"></span></summary>
+      <div class="account-actions">
+        <button type="button" data-view-link="settings">账号设置</button>
+        <button id="theme-toggle" type="button">切换主题</button>
+        <button id="logout" type="button" hidden>退出登录</button>
+      </div>
+    </details>
   </header>
   <main id="main" tabindex="-1">
     <section id="login-view" class="login-view">
