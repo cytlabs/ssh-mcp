@@ -50,11 +50,13 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator("#login-form button[type=submit]").click();
     await page.locator("#app-view").waitFor({ state: "visible" });
     await page.locator(".overview-stats").waitFor();
+    await page.locator("#account-menu summary").click();
     await page.locator("#theme-toggle").click();
     assert.equal(await page.locator("body").getAttribute("data-theme"), "dark");
     await page.reload();
     await page.locator("#app-view").waitFor({ state: "visible" });
     assert.equal(await page.locator("body").getAttribute("data-theme"), "dark");
+    await page.locator("#account-menu summary").click();
     await page.locator("#theme-toggle").click();
     assert.equal(await page.locator("body").getAttribute("data-theme"), "light");
     await page.locator("[data-view=servers]").click();
@@ -113,6 +115,7 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page
       .locator("[data-action=select][data-id=browser-added]")
       .waitFor({ state: "hidden" });
+    await page.locator("#account-menu summary").click();
     await page.locator("#logout").click();
     await page.reload();
     await page.locator("#login-view").waitFor({ state: "visible" });
