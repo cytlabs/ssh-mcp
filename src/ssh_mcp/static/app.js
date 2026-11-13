@@ -11,6 +11,7 @@ const escapeHTML = (value) =>
   );
 const storageKey = "ssh-mcp.console.admin";
 const titles = {
+  settings: ["设置", "ACCOUNT SETTINGS", "管理控制台登录账号。"],
   commands: ["命令审计", "COMMAND AUDIT", "查看发送到服务器的命令和交互输入。"],
   dashboard: [
     "概览",
@@ -249,6 +250,7 @@ function render() {
     clients: renderClients,
     activity: renderActivity,
     commands: renderCommands,
+    settings: renderSettings,
   })[view]();
 }
 function renderDashboard() {
@@ -449,6 +451,41 @@ function formatTime(value) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("zh-CN", {hour12:false});
 }
 let activityRequestId = 0;
+function renderSettings() {
+  const page = $("#page-content");
+  if (authMode !== "oauth") {
+    page.textContent = "当前控制台使用管理员 Token 登录，凭据由服务端配置。";
+    return;
+  }
+  page.innerHTML = `<form class="panel account-settings">
+    <h2>账号设置</h2>
+    <label>用户名<input name="username" autocomplete="username" required maxlength="128"></label>
+    <label>当前密码<input name="current" type="password" autocomplete="current-password" required></label>
+    <label>新密码（选填）<input name="next" type="password" autocomplete="new-password" minlength="12" maxlength="256" placeholder="保留密码请留空"></label>
+    <label>确认新密码<input name="confirm" type="password" autocomplete="new-password"></label>
+    <small>修改密码后，其他浏览器需重新登录，已授权的 MCP 客户端需重新授权。</small>
+    <button class="primary" type="submit">保存更改</button><p role="status"></p></form>`;
+  const form = page.querySelector("form"), fields = form.elements;
+  fields.username.value = state.username;
+  form.onsubmit = async event => {
+    event.preventDefault();
+    const status = form.querySelector("[role=status]"), button = form.querySelector("button");
+    if (fields.next.value !== fields.confirm.value) { status.textContent = "两次输入的新密码不一致。"; return; }
+    const username = fields.username.value.trim();
+    const body = {username, current_password: fields.current.value};
+    if (fields.next.value) body.new_password = fields.next.value;
+    button.disabled = true;
+    try {
+      const result = await authRequest("/account", "POST", body);
+      if (result.csrf) csrf = result.csrf;
+      state.username = username;
+      $("#connection-label").textContent = username;
+      fields.current.value = fields.next.value = fields.confirm.value = "";
+      status.textContent = "账号设置已保存。";
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+}
 function renderCommands(before = null, previous = [], search = "", day = "") {
   const panel = document.createElement("section");
   panel.className = "command-ledger";

@@ -67,6 +67,19 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 201, response.text)
         return response.json()
 
+    async def test_account_settings(self):
+        await self.login()
+        old_session = self.client.cookies.get(COOKIE)
+        change = {"username": "ops", "current_password": PASSWORD}
+        self.assertEqual((await self.browser("/auth/account", {**change, "current_password": "bad"})).status_code, 403)
+        self.assertEqual((await self.browser("/auth/account", change)).status_code, 200)
+        self.assertEqual(self.store.owner_username(), "ops")
+        self.assertTrue(self.store.session_valid(old_session))
+        self.assertEqual((await self.browser("/auth/account", {**change, "new_password": PASSWORD + "2"})).status_code, 200)
+        self.assertFalse(self.store.session_valid(old_session))
+        self.assertEqual((await self.browser("/auth/login", {"username": "ops", "password": PASSWORD})).status_code, 401)
+        self.assertEqual((await self.browser("/auth/login", {"username": "ops", "password": PASSWORD + "2"})).status_code, 200)
+
     async def code(self, client, *, include_resource=True, **values):
         params = {
             "client_id": client["client_id"], "redirect_uri": REDIRECT,

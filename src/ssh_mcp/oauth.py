@@ -217,6 +217,20 @@ class OAuth:
                 return JSONResponse(self.store.consent_info(params.get("request", ""), self.cookie(scope)))
             if method == "POST":
                 data = await self.body(request)
+                if path == "/auth/account":
+                    self.rate("account", 10)
+                    owner = (self.store.owner_username(), self.store.owner_password())
+                    async with self.hashers:
+                        if not await asyncio.to_thread(password_matches, data.get("current_password"), owner[1]):
+                            raise AuthError("invalid_credentials", 403)
+                        encoded = owner[1]
+                        if "new_password" in data:
+                            encoded = await asyncio.to_thread(password_hash, data["new_password"])
+                    self.store.set_password(encoded, username=data.get("username", owner[0]),
+                                            expected_owner=owner)
+                    if encoded != owner[1]:
+                        return self.session_response(self.store.browser_session())
+                    return JSONResponse({"ok": True})
                 if path == "/auth/logout":
                     self.store.logout(self.cookie(scope))
                     response = JSONResponse({"ok": True})
