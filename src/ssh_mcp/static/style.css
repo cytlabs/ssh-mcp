@@ -198,3 +198,11 @@ body:not(.authenticated) .login-view{min-height:100vh}
 
 .login-theme-toggle{position:absolute;top:20px;right:22px}.login-view{position:relative}
 .audit-command{white-space:pre-wrap;overflow-wrap:anywhere;max-width:65ch;margin:0}
+.audit-entry{padding:18px 22px;border-bottom:1px solid var(--line)}
+.audit-meta{display:grid;grid-template-columns:minmax(120px,1fr) minmax(160px,2fr) auto;gap:12px;align-items:center}
+.audit-meta small,.audit-meta strong{display:block;overflow-wrap:anywhere}
+.audit-meta small,.audit-meta time{font-size:12px;color:#536575}
+.audit-entry summary{cursor:pointer;background:#f2f5f7;padding:9px 12px;border-radius:6px;margin-top:12px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.audit-entry summary span{font-size:12px;margin-right:12px;color:#506477}
+.audit-entry .audit-command{padding:12px;max-width:100%;max-height:24rem;overflow:auto}
+@media(max-width:650px){.audit-meta{grid-template-columns:1fr 1fr}.audit-meta time{grid-column:1/-1}.audit-entry{padding:14px}}

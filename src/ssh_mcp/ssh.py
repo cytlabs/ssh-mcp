@@ -28,6 +28,7 @@ class Terminal:
     stdout: OutputBuffer
     stderr: OutputBuffer
     kind: str
+    ssh_user: str | None = None
     status: str = "running"
     last_access: float = field(default_factory=time.monotonic)
     finished_at: float | None = None
@@ -80,7 +81,8 @@ class SSHManager:
             connection = await self.connect(server)
             session_id = uuid.uuid4().hex
             if command is not None:
-                await asyncio.to_thread(record_dispatch, server_id, session_id, "command", command)
+                await asyncio.to_thread(record_dispatch, server_id, session_id, "command", command,
+                                        server.username)
             process = await asyncio.wait_for(connection.create_process(
                 command, term_type="xterm-256color" if pty else None,
                 term_size=(cols, rows), encoding="utf-8", errors="replace",
@@ -90,6 +92,7 @@ class SSHManager:
                 process=process, stdout=OutputBuffer(self.config.buffer_chars),
                 stderr=OutputBuffer(self.config.buffer_chars),
                 kind="command" if command is not None else "shell",
+                ssh_user=server.username,
             )
             if self.stopping:
                 raise InputError("Server is shutting down")
@@ -186,7 +189,7 @@ class SSHManager:
         async with terminal.input_lock:
             if terminal.kind == "shell" and data:
                 await asyncio.to_thread(record_dispatch, terminal.server_id, terminal.id,
-                                        "shell_input", data)
+                                        "shell_input", data, terminal.ssh_user)
             terminal.process.stdin.write(data)
             await asyncio.wait_for(terminal.process.stdin.drain(), 10)
             if eof:

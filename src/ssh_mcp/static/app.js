@@ -446,12 +446,17 @@ async function renderCommands(before = null, previous = []) {
       panel.textContent = data.enabled ? "暂无命令记录" : "服务端尚未启用命令审计";
       return;
     }
-    panel.innerHTML = '<div class="table-wrap"><table><thead><tr><th>时间（本地）</th><th>服务器</th><th>类型</th><th>命令或输入</th></tr></thead><tbody>' +
-      data.rows.map(row => '<tr><td>' + escapeHTML(new Date(row.timestamp).toLocaleString()) +
-        '</td><td>' + escapeHTML(row.server_id) + '</td><td>' +
-        (row.event === "command" ? "命令" : "交互输入") + '</td><td><pre class="audit-command">' +
-        escapeHTML(row.content) + '</pre></td></tr>').join("") +
-      '</tbody></table></div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
+    panel.innerHTML = '<div class="audit-list">' + data.rows.map(row => {
+      const date = new Date(row.timestamp);
+      return '<article class="audit-entry"><div class="audit-meta"><div><small>操作者</small><strong>' +
+        escapeHTML(row.operator || "未记录") + '</strong></div><div><small>SSH 用户 @ 服务器</small><strong>' +
+        escapeHTML((row.ssh_user || "未记录") + " @ " + row.server_id) +
+        '</strong></div><time>' + escapeHTML(date.toLocaleString()) +
+        '</time></div><details><summary><span>' + (row.event === "command" ? "命令" : "交互输入") +
+        '</span><code>' + escapeHTML(row.content.split("\n")[0] || "查看输入") +
+        '</code></summary><pre class="audit-command">' + escapeHTML(row.content) +
+        '</pre></details></article>';
+    }).join("") + '</div><div class="pager"><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
     $("#audit-prev").disabled = !previous.length;
     $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0, -1));
     $("#audit-next").disabled = !data.more;

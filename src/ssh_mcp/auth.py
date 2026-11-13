@@ -1,11 +1,15 @@
 """HTTP 认证与请求体大小限制。"""
 
 import hmac
+from contextvars import ContextVar
+
+operator_name = ContextVar("operator_name", default=None)
 
 
 class BearerAuth:
     def __init__(self, app, token: str = "", max_body: int = 2_097_152, *,
-                 validator=None, authorize=None, challenge=b"Bearer"):
+                 validator=None, authorize=None, challenge=b"Bearer", oauth_username=None):
+        self.oauth_username = oauth_username
         self.app = app
         self.token = token.encode("ascii")
         self.max_body = max_body
@@ -48,7 +52,13 @@ class BearerAuth:
                 return {"type": "http.request", "body": body, "more_body": False}
             return await receive()
 
-        await self.app(scope, replay, send)
+        shared = bool(self.token and len(supplied) == 2 and hmac.compare_digest(supplied[1], self.token))
+        name = "共享 MCP Token" if shared else (self.oauth_username() if self.oauth_username else None)
+        marker = operator_name.set(name)
+        try:
+            await self.app(scope, replay, send)
+        finally:
+            operator_name.reset(marker)
 
     @staticmethod
     async def reject(send, status, body, headers=None):
