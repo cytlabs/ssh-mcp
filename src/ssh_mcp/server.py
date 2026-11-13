@@ -253,7 +253,13 @@ def create_http_app(config: Config, database: Path | None = None):
     async def lifespan(app):
         try:
             async with manager_lifespan(manager), original_lifespan(app):
-                yield
+                monitor = asyncio.create_task(console.monitor_connections())
+                try:
+                    yield
+                finally:
+                    monitor.cancel()
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await monitor
         finally:
             registry.close()
             if identity:
@@ -268,7 +274,8 @@ def create_http_app(config: Config, database: Path | None = None):
                                      oauth_username=identity.owner_username),
                           manager, registry, None)
         return OAuth(console, identity)
-    return Console(BearerAuth(app, token), manager, registry, admin_token)
+    console = Console(BearerAuth(app, token), manager, registry, admin_token)
+    return console
 
 
 async def run_stdio(config: Config) -> None:

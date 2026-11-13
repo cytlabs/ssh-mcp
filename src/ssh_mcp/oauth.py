@@ -39,7 +39,9 @@ class OAuth:
         self.origin = store.resource.removesuffix("/mcp")
         self.limits = defaultdict(deque)
         self.hashers = asyncio.Semaphore(2)
-        console.admin_app = BearerAuth(console.api, max_body=65536, authorize=self.browser_authorized)
+        console.username = store.owner_username
+        console.admin_app = BearerAuth(console.api, max_body=65536, authorize=self.browser_authorized,
+                                      oauth_username=store.owner_username)
 
     def cookie(self, scope, name=COOKIE):
         values = [v for k, v in scope.get("headers", []) if k.lower() == b"cookie"]

@@ -8,7 +8,7 @@ import json
 import time
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
-from datetime import date
+from datetime import date, datetime, timezone
 
 from . import __version__
 from .auth import BearerAuth
@@ -31,6 +31,8 @@ class Console:
         self.mcp_app, self.manager, self.registry = mcp_app, manager, registry
         self.admin_app = BearerAuth(self.api, admin_token, max_body=65536) if admin_token else None
         self.probes = asyncio.Semaphore(4)
+        self.checks = {}
+        self.username = lambda: None
 
     def trusted(self, scope) -> bool:
         headers = scope.get("headers", [])
@@ -113,12 +115,36 @@ class Console:
             # Never serialize arbitrary SSH/SQLite exceptions or credential paths.
             await self.respond(send, 502, {"error": "操作未完成。请检查服务端配置、文件权限或 SSH 连接。"})
 
+    async def test_connection(self, server):
+        async with self.probes:
+            started = time.monotonic()
+            try:
+                connection = await self.manager.connect(server)
+                connection.close()
+                with contextlib.suppress(asyncio.TimeoutError):
+                    await asyncio.wait_for(connection.wait_closed(), 3)
+                result = {"ok": True, "latency_ms": round((time.monotonic() - started) * 1000)}
+            except Exception:
+                result = {"ok": False, "message": "连接失败：请检查网络、凭据和主机密钥。"}
+            if server in self.manager.config.servers:
+                self.checks[server.id] = {**result, "checked_at": datetime.now(timezone.utc).isoformat()}
+                self.registry.record("connection.test", server.id, "ok" if result["ok"] else "failed")
+            return result
+
+    async def monitor_connections(self):
+        while True:
+            started = time.monotonic()
+            await asyncio.gather(*(self.test_connection(s) for s in self.manager.config.servers),
+                                 return_exceptions=True)
+            await asyncio.sleep(max(0, 300 - (time.monotonic() - started)))
+
     async def dispatch(self, method: str, path: str, body: dict, query: bytes = b"") -> dict:
         parts = path.strip("/").split("/")
         if method == "GET" and path == "/admin/state":
             return {**self.registry.snapshot(), "version": __version__,
                     "mcp_url": self.manager.config.public_url.rstrip("/") + "/mcp",
                     "auth_mode": self.manager.config.auth_mode,
+                    "username": self.username(), "checks": self.checks,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
         if method == "GET" and path == "/admin/command-audit":
             options = parse_qs(query.decode(), max_num_fields=4)
@@ -160,22 +186,12 @@ class Console:
                                           for t in self.manager.list_sessions()):
                 raise Conflict("Close active sessions first")
             self.registry.change(body["revision"], sid, body["server"] if method == "PUT" else None)
+            self.checks.pop(sid, None)
             self.manager.config = self.registry.config(self.manager.config)
             return {"ok": True}
         if len(parts) == 4 and parts[:2] == ["admin", "servers"] and parts[3] == "test" and method == "POST":
             server = self.manager.config.server(parts[2])
-            started = time.monotonic()
-            async with self.probes:
-                try:
-                    connection = await self.manager.connect(server)
-                    connection.close()
-                    with contextlib.suppress(asyncio.TimeoutError):
-                        await asyncio.wait_for(connection.wait_closed(), 3)
-                except Exception:
-                    self.registry.record("connection.test", server.id, "failed")
-                    return {"ok": False, "message": "连接失败：请检查网络、凭据和已核验的主机密钥。"}
-            self.registry.record("connection.test", server.id)
-            return {"ok": True, "latency_ms": round((time.monotonic() - started) * 1000)}
+            return await self.test_connection(server)
         if path == "/admin/sessions" and method == "POST":
             terminal = await self.manager.start(body["server_id"], pty=False)
             self.registry.record("session.create", terminal.server_id)

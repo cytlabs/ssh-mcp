@@ -156,12 +156,26 @@ function logout() {
   $("#app-view").hidden = true;
   $("#logout").hidden = true;
   $("#connection-label").textContent = "尚未登录";
+  $("#connection-label").hidden = true;
   document.body.classList.remove("authenticated");
   $("#nav-count").textContent = "—";
   document.querySelectorAll("dialog[open]").forEach((d) => d.close());
 }
+setInterval(async () => {
+  if (!state || document.hidden || !["dashboard", "servers"].includes(view)) return;
+  try {
+    await refresh(false);
+    if (view === "dashboard") renderDashboard();
+    if (view === "servers") { renderServerRows(); renderDetail(); }
+  } catch { /* The next poll retries. */ }
+}, 60000);
 async function refresh(renderPage = true) {
   state = await api("/state");
+  for (const [id, result] of Object.entries(state.checks || {})) {
+    probes.set(id, {type: result.ok ? "ok" : "failed",
+      text: result.ok ? `可连接 · ${result.latency_ms} ms` : "连接失败",
+      message: result.message || "SSH 登录测试成功。", checkedAt: formatTime(result.checked_at)});
+  }
   if (!state.servers.some((s) => s.id === selected))
     selected = null;
   if (!state.sessions.some((s) => s.session_id === selectedSession))
@@ -187,7 +201,8 @@ async function login(value, remember = false) {
   $("#app-view").hidden = false;
   document.body.classList.add("authenticated");
   $("#logout").hidden = false;
-  $("#connection-label").textContent = "管理员已连接";
+  $("#connection-label").textContent = state.username || "管理员 Token";
+  $("#connection-label").hidden = false;
   render();
   if (authMode === "oauth" && authorizationRequest) await showConsent();
 }
