@@ -4,6 +4,7 @@ import hmac
 from contextvars import ContextVar
 
 operator_name = ContextVar("operator_name", default=None)
+operator_nickname = ContextVar("operator_nickname", default="")
 
 
 class BearerAuth:
@@ -53,12 +54,15 @@ class BearerAuth:
             return await receive()
 
         shared = bool(self.token and len(supplied) == 2 and hmac.compare_digest(supplied[1], self.token))
-        name = "共享 MCP Token" if shared else (self.oauth_username() if self.oauth_username else None)
+        name, nickname = ("共享 MCP Token", "") if shared else (
+            self.oauth_username() if self.oauth_username else (None, ""))
         marker = operator_name.set(name)
+        nick_marker = operator_nickname.set(nickname)
         try:
             await self.app(scope, replay, send)
         finally:
             operator_name.reset(marker)
+            operator_nickname.reset(nick_marker)
 
     @staticmethod
     async def reject(send, status, body, headers=None):

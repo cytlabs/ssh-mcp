@@ -39,9 +39,9 @@ class OAuth:
         self.origin = store.resource.removesuffix("/mcp")
         self.limits = defaultdict(deque)
         self.hashers = asyncio.Semaphore(2)
-        console.username = store.owner_username
+        console.profile = store.owner_profile
         console.admin_app = BearerAuth(console.api, max_body=65536, authorize=self.browser_authorized,
-                                      oauth_username=store.owner_username)
+                                      oauth_username=store.owner_profile)
 
     def cookie(self, scope, name=COOKIE):
         values = [v for k, v in scope.get("headers", []) if k.lower() == b"cookie"]
@@ -217,6 +217,8 @@ class OAuth:
                 return JSONResponse(self.store.consent_info(params.get("request", ""), self.cookie(scope)))
             if method == "POST":
                 data = await self.body(request)
+                if path == "/auth/profile":
+                    return JSONResponse({"nickname": self.store.set_nickname(data.get("nickname"))})
                 if path == "/auth/account":
                     self.rate("account", 10)
                     owner = (self.store.owner_username(), self.store.owner_password())

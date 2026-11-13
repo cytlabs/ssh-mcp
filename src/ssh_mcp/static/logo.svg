@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 48 48" role="img" aria-label="SSH-MCP logo">
-<rect x="2" y="2" width="44" height="44" rx="13" fill="#6169d5"/>
+<rect x="2" y="2" width="44" height="44" rx="13" fill="#24292f"/>
 <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="21.5" cy="31" r="3" fill="#badcff"/>
+<circle cx="21.5" cy="31" r="3" fill="#fd8c73"/>
 </svg>

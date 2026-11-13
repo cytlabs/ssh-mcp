@@ -14,9 +14,9 @@
 <aside class="sidebar">
   <a href="/console" class="brand" aria-label="SSH-MCP 首页">
     <svg class="logo-mark" viewBox="0 0 48 48" aria-hidden="true">
-      <rect x="2" y="2" width="44" height="44" rx="13" fill="#6169d5"/>
+      <rect x="2" y="2" width="44" height="44" rx="13" fill="#24292f"/>
       <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="21.5" cy="31" r="3" fill="#badcff"/>
+      <circle cx="21.5" cy="31" r="3" fill="#fd8c73"/>
     </svg>
     <span>SSH-MCP</span>
   </a>
@@ -44,9 +44,9 @@
       <button id="login-theme-toggle" class="icon-button login-theme-toggle" type="button" aria-label="切换到深色模式" title="切换主题">☾</button>
       <div class="login-brand">
         <svg class="logo-mark large" viewBox="0 0 48 48" aria-hidden="true">
-          <rect x="2" y="2" width="44" height="44" rx="13" fill="#6169d5"/>
+          <rect x="2" y="2" width="44" height="44" rx="13" fill="#24292f"/>
           <path d="M16.5 35V13h10c7 0 10.5 3.3 10.5 9s-3.5 9-10.5 9H22" fill="none" stroke="white" stroke-width="4.2" stroke-linecap="round" stroke-linejoin="round"/>
-          <circle cx="21.5" cy="31" r="3" fill="#badcff"/>
+          <circle cx="21.5" cy="31" r="3" fill="#fd8c73"/>
         </svg>
         <strong>SSH-MCP</strong>
       </div>
@@ -68,9 +68,10 @@
     <section id="consent-view" class="panel setup-panel" hidden aria-labelledby="consent-title">
       <h1 id="consent-title">允许客户端连接？</h1>
       <p id="consent-client"></p>
-      <p class="note">请核对客户端提供的回调地址。</p>
+      <h3>回调地址</h3>
       <pre id="consent-redirect" class="consent-address"></pre>
-      <p>授权后，此客户端可通过 SSH 账户现有权限访问全部已配置服务器，执行命令和操作文件。</p>
+      <h3>当前账户</h3><p id="consent-account"></p>
+      <h3>访问范围</h3><p>授权后，此客户端可通过 SSH 账户现有权限访问全部已配置服务器，执行命令和操作文件。</p>
       <p class="note">可在「MCP 接入」撤销授权；撤销不会终止已运行的远程进程。</p>
       <div class="dialog-actions">
         <button id="deny-consent" class="secondary" type="button">拒绝</button>

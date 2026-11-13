@@ -271,7 +271,7 @@ def create_http_app(config: Config, database: Path | None = None):
         challenge = ('Bearer resource_metadata="' + config.public_url.rstrip("/")
                      + '/.well-known/oauth-protected-resource/mcp", scope="ssh:access"').encode()
         console = Console(BearerAuth(app, token, validator=identity.access_valid, challenge=challenge,
-                                     oauth_username=identity.owner_username),
+                                     oauth_username=identity.owner_profile),
                           manager, registry, None)
         return OAuth(console, identity)
     console = Console(BearerAuth(app, token), manager, registry, admin_token)

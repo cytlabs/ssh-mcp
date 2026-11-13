@@ -21,7 +21,7 @@ const titles = {
   servers: [
     "服务器",
     "SERVER INVENTORY",
-    "搜索、维护并检测服务器连接。",
+    "每 5 分钟自动检测 SSH 连接。",
   ],
 clients: [
     "MCP 接入",
@@ -202,7 +202,7 @@ async function login(value, remember = false) {
   $("#app-view").hidden = false;
   document.body.classList.add("authenticated");
   $("#logout").hidden = false;
-  $("#connection-label").textContent = state.username || "管理员 Token";
+  showAccount();
   $("#connection-label").hidden = false;
   render();
   if (authMode === "oauth" && authorizationRequest) await showConsent();
@@ -266,17 +266,16 @@ function renderDashboard() {
       ${stat("最近记录", (state.activity || []).length, "最多显示最近 50 条", "◷")}
     </div>
     <div class="overview-columns">
-      <section class="overview-section"><div class="overview-heading"><h2>服务器</h2><button class="text-link" data-view-link="servers">查看全部 →</button></div>
-        <div class="overview-hosts">${servers.length ? servers.slice(0,6).map(x => {
+      <section class="overview-section"><div class="overview-heading"><h2>服务器连通性</h2><button class="text-link" data-view-link="servers">查看全部 →</button></div>
+        <div class="table-wrap"><table><thead><tr><th>服务器</th><th>状态</th><th>最近检测</th></tr></thead><tbody>${servers.slice(0,6).map(x => {
           const p = probes.get(x.id);
-          return '<div class="overview-host"><span class="overview-host-icon">▤</span><span><strong>' +
-            escapeHTML(x.id) + '</strong><small>' + escapeHTML(x.host) + ':' + x.port +
-            '</small></span>' + (p ? badge(p.type,p.text) : badge("","未检测")) + '</div>';
-        }).join("") : '<div class="overview-empty">暂无服务器。</div>'}</div></section>
+          return '<tr><td><strong>' + escapeHTML(x.id) + '</strong><small>' + escapeHTML(x.host) + ':' + x.port +
+            '</small></td><td>' + statusBadge(x.id) + '</td><td>' + escapeHTML(p?.checkedAt || "—") + '</td></tr>';
+        }).join("")}</tbody></table></div>${servers.length ? "" : '<p class="overview-empty">暂无服务器。</p>'}</section>
       <section class="overview-section"><div class="overview-heading"><h2>最近操作</h2><button class="text-link" data-view-link="activity">查看全部 →</button></div>
-        <div class="overview-events">${recent.length ? recent.map(x => '<div class="overview-event"><span class="event-bullet"></span><div><strong>' +
-          escapeHTML(activityLabels[x.event] || x.event) + '</strong><small>' + escapeHTML(x.target) +
-          '</small></div><time>' + escapeHTML(formatTime(x.timestamp)) + '</time></div>').join("") : '<div class="overview-empty">暂无操作记录。</div>'}</div></section>
+        <div class="table-wrap"><table><thead><tr><th>时间</th><th>操作</th><th>目标</th></tr></thead><tbody>${recent.map(x => '<tr><td>' +
+          escapeHTML(formatTime(x.timestamp)) + '</td><td>' + escapeHTML(activityLabels[x.event] || x.event) +
+          '</td><td>' + escapeHTML(x.target) + '</td></tr>').join("")}</tbody></table></div>${recent.length ? "" : '<p class="overview-empty">暂无操作记录。</p>'}</section>
     </div>
     <div class="overview-access"><span>⇄</span><div><strong>MCP 接入</strong><p>连接 Codex、Claude Code、Cursor 等客户端。</p></div><button class="text-link" data-view-link="clients">查看配置 →</button></div>`;
 }
@@ -310,17 +309,17 @@ function renderServerRows() {
     return;
   }
   $("#server-rows").innerHTML = count ? `
-    <div class="table-wrap"><table><thead><tr><th>名称</th><th>主机地址</th><th>认证方式</th><th>最近测试</th><th>状态</th><th>操作</th></tr></thead>
+    <div class="table-wrap"><table><thead><tr><th>名称</th><th>主机地址</th><th>SSH 用户</th><th>最近检测</th><th>状态</th><th>操作</th></tr></thead>
       <tbody>${rows.map(x => {
         const p = probes.get(x.id);
         return '<tr class="server-row ' + (selected === x.id ? "selected" : "") + '"><td><button class="server-name" data-action="select" data-id="' +
           escapeHTML(x.id) + '"><span class="server-icon">▤</span><span><strong>' + escapeHTML(x.id) +
           '</strong><small>' + escapeHTML(x.description || "") + '</small></span></button></td><td class="address">' +
-          escapeHTML(x.host) + ':' + x.port + '<small>' + escapeHTML(x.username) +
-          '</small></td><td>' + (x.private_key ? "SSH 私钥" : "密码认证") + '</td><td>' +
+          escapeHTML(x.host) + ':' + x.port + '</td><td>' + escapeHTML(x.username) +
+          '</td><td>' +
           escapeHTML(p?.checkedAt || "—") + '</td><td>' + statusBadge(x.id) +
           '</td><td><button class="text-link" data-action="test" data-id="' + escapeHTML(x.id) + '"' +
-          (p?.type === "running" ? " disabled" : "") + '>测试连接</button></td></tr>';
+          (p?.type === "running" ? " disabled" : "") + '>立即检测</button></td></tr>';
       }).join("")}</tbody></table></div>
       <div class="pager"><span class="pager-meta">共 ${count} 条 · 第 ${serverPage} / ${pages} 页</span>
         <button data-action="server-prev" ${serverPage === 1 ? "disabled" : ""}>上一页</button>
@@ -451,21 +450,45 @@ function formatTime(value) {
   return Number.isNaN(d.getTime()) ? "" : d.toLocaleString("zh-CN", {hour12:false});
 }
 let activityRequestId = 0;
+function showAccount() {
+  const label = $("#connection-label");
+  label.textContent = state.nickname || state.username || "管理员 Token";
+  label.title = state.username || "";
+  label.dataset.initial = Array.from(label.textContent)[0];
+}
 function renderSettings() {
   const page = $("#page-content");
   if (authMode !== "oauth") {
     page.textContent = "当前控制台使用管理员 Token 登录，凭据由服务端配置。";
     return;
   }
-  page.innerHTML = `<form class="panel account-settings">
-    <h2>账号设置</h2>
-    <label>用户名<input name="username" autocomplete="username" required maxlength="128"></label>
+  page.innerHTML = `<form class="account-settings" id="profile-form"><h2>个人资料</h2>
+    <label>昵称<input name="nickname" maxlength="64" autocomplete="nickname" placeholder="输入中文或其他显示名称"></label>
+    <small>显示在控制台和新的命令审计记录中。</small>
+    <button class="primary" type="submit">保存昵称</button><p role="status"></p></form>
+    <form class="account-settings" id="security-form">
+    <h2>登录与安全</h2>
+    <label>登录用户名<input name="username" autocomplete="username" required maxlength="128"></label>
     <label>当前密码<input name="current" type="password" autocomplete="current-password" required></label>
     <label>新密码（选填）<input name="next" type="password" autocomplete="new-password" minlength="12" maxlength="256" placeholder="保留密码请留空"></label>
     <label>确认新密码<input name="confirm" type="password" autocomplete="new-password"></label>
     <small>修改密码后，其他浏览器需重新登录，已授权的 MCP 客户端需重新授权。</small>
     <button class="primary" type="submit">保存更改</button><p role="status"></p></form>`;
-  const form = page.querySelector("form"), fields = form.elements;
+  const profile = $("#profile-form");
+  profile.elements.nickname.value = state.nickname || "";
+  profile.onsubmit = async event => {
+    event.preventDefault();
+    const button = profile.querySelector("button"), message = profile.querySelector("[role=status]");
+    button.disabled = true;
+    try {
+      const result = await authRequest("/profile", "POST", {nickname: profile.elements.nickname.value});
+      state.nickname = result.nickname;
+      showAccount();
+      message.textContent = "昵称已保存。";
+    } catch (error) { message.textContent = error.message; }
+    finally { button.disabled = false; }
+  };
+  const form = $("#security-form"), fields = form.elements;
   fields.username.value = state.username;
   form.onsubmit = async event => {
     event.preventDefault();
@@ -479,7 +502,7 @@ function renderSettings() {
       const result = await authRequest("/account", "POST", body);
       if (result.csrf) csrf = result.csrf;
       state.username = username;
-      $("#connection-label").textContent = username;
+      showAccount();
       fields.current.value = fields.next.value = fields.confirm.value = "";
       status.textContent = "账号设置已保存。";
     } catch (error) { status.textContent = error.message; }
@@ -522,7 +545,8 @@ function renderCommands(before = null, previous = [], search = "", day = "") {
         const command = row.content.length > 70 || row.content.includes("\n")
           ? '<details><summary>' + escapeHTML(row.content.split("\n")[0].slice(0,70) || "查看输入") + '…</summary><pre>' + content + '</pre></details>'
           : '<code>' + content + '</code>';
-        return '<tr><td><strong>' + escapeHTML(row.operator || "未记录") + '</strong></td><td>' +
+        return '<tr><td><strong>' + escapeHTML(row.nickname || row.operator || "未记录") + '</strong>' +
+          (row.nickname ? '<small>' + escapeHTML(row.operator) + '</small>' : '') + '</td><td>' +
           escapeHTML((row.ssh_user || "未记录") + " @ " + row.server_id) + '</td><td><time>' +
           escapeHTML(new Date(row.timestamp).toLocaleString("sv-SE")) + '</time></td><td>' +
           (row.event === "shell_input" ? '<small>交互输入</small>' : '') + command + '</td></tr>';
@@ -745,6 +769,7 @@ document.addEventListener("click", (event) => {
 });
 const authMessages = {
   invalid_credentials: "用户名或密码不正确。",
+  invalid_nickname: "昵称最多 64 个可显示字符。",
   invalid_username: "用户名可使用字母、数字和 . _ @ + -，最长 128 位。",
   setup_link_invalid: "初始化链接已失效，请让部署管理员重新生成链接。",
   password_length: "密码需要 12 到 256 个字符。",
@@ -790,6 +815,7 @@ async function showConsent() {
   const info = await authRequest(`/consent?request=${encodeURIComponent(authorizationRequest)}`);
   $("#consent-client").textContent = `${info.client_name} 请求连接你的 SSH MCP。`;
   $("#consent-redirect").textContent = info.redirect_uri;
+  $("#consent-account").textContent = [state.nickname, state.username].filter(Boolean).join(" · ");
   $("#app-view").hidden = true;
   $("#consent-view").hidden = false;
   $("#allow-consent").focus();
@@ -802,8 +828,19 @@ for (const [id, approve] of [["#allow-consent", true], ["#deny-consent", false]]
 }
 function renderOAuthClients() {
   const url = state.mcp_url;
-  const code = `codex mcp add ssh_mcp --url ${url}\ncodex mcp login ssh_mcp`;
-  $("#page-content").innerHTML = `<section class="panel setup-panel"><span class="section-kicker">BROWSER AUTHORIZATION</span><h2>添加地址，在浏览器中授权</h2><p>客户端自动保存登录凭据。日常使用无需设置 Token 环境变量或运行启动脚本。</p><div class="endpoint"><code id="endpoint-url">${escapeHTML(url)}</code><button class="text-link" data-action="copy-url">复制地址</button></div><div class="step"><h3>Codex CLI</h3><div class="code-block"><div class="code-heading"><span>终端</span><button data-action="copy-config">复制命令</button></div><pre id="client-config">${escapeHTML(code)}</pre></div><p class="note">如果之前配置过 bearer_token_env_var 或固定 Authorization 请求头，请先移除，再重新登录。</p></div><div class="step"><h3>其他远程 MCP 客户端</h3><p>在 ChatGPT、Cursor 或 Claude 的 MCP 设置中添加上方 URL，选择 OAuth 或浏览器授权，然后登录并确认客户端权限。具体入口以客户端支持情况为准。</p><p class="note">这些说明不代表已在每个客户端完成验收。静态 Bearer Token 仍可作为自动化兼容方式。</p></div></section><section class="panel setup-panel"><div class="panel-title"><h2>已授权的客户端</h2><button id="load-grants" class="secondary">刷新授权</button></div><div id="grants-list">正在读取…</div><p class="note">撤销会阻止客户端继续调用 MCP，已经启动的远程进程需要在终端会话中另外关闭。</p></section>`;
+  const options = ["Codex", "Cursor", "Claude Code", "ChatGPT"];
+  const tabs = options.map(name => `<button class="client-option" data-action="client" data-id="${name}" aria-pressed="${client === name}">${name}</button>`).join("");
+  const code = client === "Codex" ? `codex mcp add ssh_mcp --url ${url}\ncodex mcp login ssh_mcp` :
+    client === "Cursor" ? JSON.stringify({mcpServers:{ssh:{url}}}, null, 2) :
+    client === "Claude Code" ? `claude mcp add --transport http ssh_mcp ${url}` : "";
+  $("#page-content").innerHTML = `<div class="client-layout">
+    <div class="client-options" aria-label="选择客户端">${tabs}</div>
+    <section class="panel setup-panel"><h2>MCP 端点</h2>
+    <div class="endpoint"><code id="endpoint-url">${escapeHTML(url)}</code><button class="text-link" data-action="copy-url">复制地址</button></div>
+    <div class="step"><h3>连接 ${escapeHTML(client)}</h3>
+    ${code ? `<div class="code-block"><div class="code-heading"><span>${client === "Cursor" ? "mcp.json" : "终端"}</span><button data-action="copy-config">复制配置</button></div><pre id="client-config">${escapeHTML(code)}</pre></div>` : '<p>在客户端设置中添加上方 MCP 地址，选择 OAuth 并完成浏览器授权。</p>'}
+    </div><div class="step"><h3>验证连接</h3><p>在客户端完成浏览器授权后，输入「列出可用服务器」。</p></div></section>
+    <section class="panel setup-panel"><div class="overview-heading"><h2>已授权的客户端</h2><button id="load-grants" class="secondary">刷新授权</button></div><div id="grants-list">正在读取…</div><p class="note">撤销后客户端无法继续调用 MCP。已启动的远程进程可在终端会话中关闭。</p></section></div>`;
   $("#load-grants").addEventListener("click", (event) => busy(event.currentTarget, loadGrants));
   loadGrants().catch((error) => notify(error.message, true));
 }

@@ -32,7 +32,7 @@ class Console:
         self.admin_app = BearerAuth(self.api, admin_token, max_body=65536) if admin_token else None
         self.probes = asyncio.Semaphore(4)
         self.checks = {}
-        self.username = lambda: None
+        self.profile = lambda: (None, "")
 
     def trusted(self, scope) -> bool:
         headers = scope.get("headers", [])
@@ -141,10 +141,11 @@ class Console:
     async def dispatch(self, method: str, path: str, body: dict, query: bytes = b"") -> dict:
         parts = path.strip("/").split("/")
         if method == "GET" and path == "/admin/state":
+            username, nickname = self.profile()
             return {**self.registry.snapshot(), "version": __version__,
                     "mcp_url": self.manager.config.public_url.rstrip("/") + "/mcp",
                     "auth_mode": self.manager.config.auth_mode,
-                    "username": self.username(), "checks": self.checks,
+                    "username": username, "nickname": nickname, "checks": self.checks,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
         if method == "GET" and path == "/admin/command-audit":
             options = parse_qs(query.decode(), max_num_fields=4)

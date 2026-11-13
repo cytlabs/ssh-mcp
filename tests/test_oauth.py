@@ -69,6 +69,9 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_account_settings(self):
         await self.login()
+        saved = await self.browser("/auth/profile", {"nickname": "  林辰  "})
+        self.assertEqual(saved.json()["nickname"], "林辰")
+        self.assertEqual(self.store.owner_profile(), ("admin", "林辰"))
         old_session = self.client.cookies.get(COOKIE)
         change = {"username": "ops", "current_password": PASSWORD}
         self.assertEqual((await self.browser("/auth/account", {**change, "current_password": "bad"})).status_code, 403)
@@ -77,6 +80,7 @@ class OAuthTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.store.session_valid(old_session))
         self.assertEqual((await self.browser("/auth/account", {**change, "new_password": PASSWORD + "2"})).status_code, 200)
         self.assertFalse(self.store.session_valid(old_session))
+        self.assertEqual(self.store.owner_profile(), ("ops", "林辰"))
         self.assertEqual((await self.browser("/auth/login", {"username": "ops", "password": PASSWORD})).status_code, 401)
         self.assertEqual((await self.browser("/auth/login", {"username": "ops", "password": PASSWORD + "2"})).status_code, 200)
 

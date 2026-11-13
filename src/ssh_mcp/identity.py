@@ -126,6 +126,8 @@ class IdentityStore:
         """)
         if "username" not in {row[1] for row in self.db.execute("PRAGMA table_info(owner)")}:
             self.db.execute("ALTER TABLE owner ADD COLUMN username TEXT NOT NULL DEFAULT 'admin'")
+        if "nickname" not in {row[1] for row in self.db.execute("PRAGMA table_info(owner)")}:
+            self.db.execute("ALTER TABLE owner ADD COLUMN nickname TEXT NOT NULL DEFAULT ''")
 
     @contextmanager
     def transaction(self):
@@ -152,6 +154,21 @@ class IdentityStore:
         with self.lock:
             row = self.db.execute("SELECT password FROM owner WHERE id=1").fetchone()
             return row[0] if row else None
+
+    def owner_profile(self):
+        with self.lock:
+            row = self.db.execute("SELECT username,nickname FROM owner WHERE id=1").fetchone()
+            return tuple(row) if row else (None, "")
+
+    def set_nickname(self, nickname):
+        if not isinstance(nickname, str):
+            raise AuthError("invalid_nickname")
+        nickname = nickname.strip()
+        if len(nickname) > 64 or (nickname and not nickname.isprintable()):
+            raise AuthError("invalid_nickname")
+        with self.transaction():
+            self.db.execute("UPDATE owner SET nickname=? WHERE id=1", (nickname,))
+        return nickname
 
     def owner_username(self):
         with self.lock:
@@ -205,7 +222,8 @@ class IdentityStore:
                     "SELECT 1 FROM setup WHERE hash=? AND expires>?", (digest(setup_token), time.time())
                 ).fetchone():
                     raise AuthError("setup_link_invalid", 401)
-            self.db.execute("INSERT OR REPLACE INTO owner(id,password,username) VALUES(1,?,?)", (encoded, username))
+            self.db.execute("INSERT INTO owner(id,password,username) VALUES(1,?,?) ON CONFLICT(id) "
+                            "DO UPDATE SET password=excluded.password, username=excluded.username", (encoded, username))
             self.db.execute("DELETE FROM setup")
             self.db.execute("DELETE FROM browser_sessions")
             self.db.execute("DELETE FROM pending")
