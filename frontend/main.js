@@ -1,4 +1,4 @@
-import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, activityColumns, mountCommands } from "./components.js";
+import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, serverDetail, activityColumns, mountCommands } from "./components.js";
 const navigation = mountNavigation(document.querySelector(".sidebar nav"));
 
 const $ = (selector) => document.querySelector(selector);
@@ -169,7 +169,7 @@ setInterval(async () => {
   try {
     await refresh(false);
     if (view === "dashboard") renderDashboard();
-    if (view === "servers") { renderServerRows(); renderDetail(); }
+    if (view === "servers") { renderServerRows(); }
   } catch { /* The next poll retries. */ }
 }, 60000);
 async function refresh(renderPage = true) {
@@ -177,7 +177,7 @@ async function refresh(renderPage = true) {
   for (const [id, result] of Object.entries(state.checks || {})) {
     probes.set(id, {type: result.ok ? "ok" : "failed",
       text: result.ok ? `可连接 · ${result.latency_ms} ms` : "连接失败",
-      message: result.message || "SSH 登录测试成功。", checkedAt: formatTime(result.checked_at)});
+      systemInfo: result.system_info, message: result.message || "SSH 登录测试成功。", checkedAt: formatTime(result.checked_at)});
   }
   if (!state.servers.some((s) => s.id === selected))
     selected = null;
@@ -281,13 +281,13 @@ function renderServers() {
       <label class="search"><span>⌕</span><input id="server-search" type="search" aria-label="搜索服务器" value="${escapeHTML(search)}" placeholder="搜索名称、地址或备注"></label>
       <select id="auth-filter" aria-label="认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select>
       <select id="status-filter" aria-label="连接测试状态"><option value="all">全部状态</option><option value="ok">可连接</option><option value="failed">连接失败</option><option value="untested">未检测</option></select>
-    </div><div id="server-rows"></div></section><section class="panel" id="server-detail" hidden></section>`;
+    </div><div id="server-rows"></div></section>`;
   $("#auth-filter").value = authFilter;
   $("#status-filter").value = serverStatus;
   $("#server-search").addEventListener("input", e => { search = e.target.value; serverPage = 1; renderServerRows(); });
   $("#auth-filter").addEventListener("change", e => { authFilter = e.target.value; serverPage = 1; renderServerRows(); });
   $("#status-filter").addEventListener("change", e => { serverStatus = e.target.value; serverPage = 1; renderServerRows(); });
-  renderServerRows(); renderDetail();
+  renderServerRows();
 }
 function renderServerRows() {
   const term = search.trim().toLowerCase();
@@ -312,29 +312,10 @@ function renderServerRows() {
         <select id="server-page-size" aria-label="每页条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select>
       </div>` :
       '<div class="empty"><h3>没有匹配的服务器</h3><button class="secondary" data-action="clear-search">清除筛选</button></div>';
-  if (count) mountTable($("#server-rows .vue-table"), rows, serverColumns(probes), row => row.id === selected ? "server-row selected" : "server-row");
+  if (count) mountTable($("#server-rows .vue-table"), rows, serverColumns(probes, selected), row => row.id === selected ? "server-row selected" : "server-row",
+    { selected, detail: row => serverDetail(row, probes.get(row.id)) });
   const size = $("#server-page-size");
   if(size){ size.value = String(serverSize); size.addEventListener("change", e => { serverSize = Number(e.target.value); serverPage = 1; renderServerRows(); }); }
-}
-function renderDetail() {
-  const el = $("#server-detail");
-  if(!el) return;
-  const x = state.servers.find(s => s.id === selected);
-  el.hidden = !x;
-  if(!x) return;
-  const probe = probes.get(x.id);
-  const rows = [["地址", x.host + ":" + x.port],["登录用户",x.username],
-    ["认证方式",x.private_key ? "SSH 私钥" : "密码认证"],
-    ["凭据引用", x.private_key || x.password_env],["主机公钥",x.known_hosts],
-    ["最近测试",probe?.checkedAt || "未检测"]];
-  el.innerHTML = `<div class="detail">
-    <div class="detail-heading"><span class="server-icon">▤</span><div><h3>${escapeHTML(x.id)}</h3><p>${escapeHTML(x.description || "")}</p></div>
-      <button class="icon-button" data-action="close-detail" aria-label="关闭详情">×</button></div>
-    <dl class="details">${rows.map(([k,v]) => '<div><dt>' + escapeHTML(k) + '</dt><dd>' + escapeHTML(v) + '</dd></div>').join("")}</dl>
-    <div class="inline-actions"><button class="primary" data-action="edit" data-id="${escapeHTML(x.id)}">编辑服务器</button>
-      <button class="secondary" data-action="test" data-id="${escapeHTML(x.id)}">测试连接</button>
-      <button class="text-link" data-action="delete" data-id="${escapeHTML(x.id)}">移除服务器</button></div>
-    ${probe?.message ? '<p class="detail-foot">' + escapeHTML(probe.message) + '</p>' : ""}</div>`;
 }
 function editServer(id = null) {
   const form = $("#server-form");
@@ -650,24 +631,24 @@ document.addEventListener("click", (event) => {
     else if (action === "server-next") { serverPage++; renderServerRows(); }
     else if (action === "activity-prev") { activityPage = Math.max(1,activityPage-1); loadActivity(); }
     else if (action === "activity-next") { activityPage++; loadActivity(); }
-    else if (action === "close-detail") { selected = null; renderServerRows(); renderDetail(); }
+    else if (action === "close-detail") { selected = null; renderServerRows(); }
     else if (action === "select") {
-      selected = id;
+      selected = selected === id ? null : id;
       renderServerRows();
-      renderDetail();
+
     } else if (action === "clear-search") {
       search = ""; authFilter = "all"; serverStatus = "all"; serverPage = 1; renderServers();
     } else if (action === "test") {
-      probes.set(id, { type: "running", text: "连接中" });
+      probes.set(id, { ...probes.get(id), type: "running", text: "连接中" });
       renderServerRows();
-      renderDetail();
+
       try {
         const result = await api(`/servers/${id}/test`, "POST", {});
         probes.set(
           id,
           result.ok
             ? {
-                type: "ok",
+                type: "ok", systemInfo: result.system_info,
                 text: `可连接 · ${result.latency_ms} ms`,
                 message: "SSH 登录测试成功。", checkedAt: formatTime(new Date().toISOString()),
               }
@@ -680,7 +661,7 @@ document.addEventListener("click", (event) => {
       } finally {
         if (state && view === "servers") {
           renderServerRows();
-          renderDetail();
+
         }
       }
     } else if (action === "delete") {

@@ -25,6 +25,35 @@ SECURITY_HEADERS = [
      b"connect-src 'self'; img-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'"),
 ]
 
+_SYSTEM_INFO = r"""
+if [ -r /etc/os-release ]; then . /etc/os-release; fi
+printf '%s\n' "${PRETTY_NAME:-$(uname -s)}"
+getconf _NPROCESSORS_ONLN 2>/dev/null || echo ''
+awk '/^MemTotal:/ {print $2; exit}' /proc/meminfo 2>/dev/null || echo ''
+df -Pk / | awk 'NR==2 {print $2}'
+"""
+
+
+async def system_info(connection):
+    # 远端输出不可信。仅读取固定上限，采集失败不影响 SSH 登录结果。
+    async with connection.create_process(_SYSTEM_INFO, stderr=asyncio.subprocess.DEVNULL) as process:
+        chunks = []
+        remaining = 1025
+        while remaining:
+            chunk = await process.stdout.read(remaining)
+            if not chunk:
+                break
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        lines = "".join(chunks).splitlines()
+        if not remaining or len(lines) != 4:
+            return {}
+        info = {"os": "".join(c for c in lines[0] if c.isprintable())[:120]}
+        for key, value in zip(("cpu", "memory_kib", "root_disk_kib"), lines[1:]):
+            if value.isascii() and value.isdigit() and len(value) <= 16 and int(value) > 0:
+                info[key] = int(value)
+        return info
+
 
 class Console:
     def __init__(self, mcp_app, manager, registry, admin_token: str | None):
@@ -120,10 +149,14 @@ class Console:
             started = time.monotonic()
             try:
                 connection = await self.manager.connect(server)
-                connection.close()
-                with contextlib.suppress(asyncio.TimeoutError):
-                    await asyncio.wait_for(connection.wait_closed(), 3)
                 result = {"ok": True, "latency_ms": round((time.monotonic() - started) * 1000)}
+                try:
+                    with contextlib.suppress(Exception):
+                        result["system_info"] = await asyncio.wait_for(system_info(connection), 5)
+                finally:
+                    connection.close()
+                    with contextlib.suppress(asyncio.TimeoutError):
+                        await asyncio.wait_for(connection.wait_closed(), 3)
             except Exception:
                 result = {"ok": False, "message": "连接失败：请检查网络、凭据和主机密钥。"}
             if server in self.manager.config.servers:

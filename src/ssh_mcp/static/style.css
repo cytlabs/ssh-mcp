@@ -101,6 +101,8 @@ th,td{padding:13px 17px;border-bottom:1px solid var(--line)}
 tbody tr:hover{background:var(--hover)}
 tbody tr:last-child td{border-bottom:0}
 .server-row.selected{background:var(--accent-soft)}
+.server-specs{display:grid;gap:3px;min-width:13em;white-space:normal}
+.server-specs span{font-size:12px;color:var(--muted)}
 .server-name{display:flex;align-items:center;gap:10px;text-align:left;font-size:12px}
 .server-name strong{font-weight:610}
 .server-name small,.address small{font-size:11px;display:block;color:var(--muted);margin-top:2px}

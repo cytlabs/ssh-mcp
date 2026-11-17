@@ -5,6 +5,7 @@ Never load user configuration or bind a public interface. Not a production serve
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 import json
 import sys
 import tempfile
@@ -32,8 +33,16 @@ class FixtureManager:
     async def connect(self, server):
         async def wait_closed():
             pass
+        @asynccontextmanager
+        async def create_process(*args, **kwargs):
+            stdout = asyncio.StreamReader()
+            stdout.feed_data(b"Fixture Linux\n4\n8388608\n52428800\n")
+            stdout.feed_eof()
+            async def read(size):
+                return (await stdout.read(size)).decode()
+            yield SimpleNamespace(stdout=SimpleNamespace(read=read))
         await asyncio.sleep(0.05)
-        return SimpleNamespace(close=lambda: None, wait_closed=wait_closed)
+        return SimpleNamespace(close=lambda: None, wait_closed=wait_closed, create_process=create_process)
 
     async def start(self, server_id, pty=False):
         self.config.server(server_id)

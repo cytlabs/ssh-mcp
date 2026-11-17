@@ -152,6 +152,11 @@ for (const startupDelay of [0, 3000]) test(
       );
       click("[data-action=test][data-id=browser-added]");
       await wait(() => $("#server-rows").textContent.includes("可连接"));
+      const row = $(".server-row.selected");
+      assert.equal($("#server-detail").closest("tr").previousElementSibling, row);
+      assert.match(row.textContent, /Fixture Linux.*CPU 4 线程.*内存 8 GiB.*根分区 50 GiB/);
+      click("[data-action=select][data-id=browser-added]");
+      assert.equal(doc.querySelector("#server-detail"), null);
     });
     await step("操作记录支持按类别筛选", async () => {
       click("[data-view=activity]");
