@@ -108,12 +108,20 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.getByRole("button", { name: "保存服务器" }).click();
     await page.locator("#server-dialog").waitFor({ state: "hidden" });
     await page.locator("#server-detail [data-action=test][data-id=browser-added]").click();
-    await page.locator(".badge.ok").waitFor();
+    await page.locator("#server-detail .badge.ok").waitFor();
     fs.mkdirSync(path.join(root, "test-results"), { recursive: true });
     await page.screenshot({
       path: path.join(root, "test-results/console-desktop.png"),
       fullPage: true,
     });
+    await page.keyboard.press("Escape");
+    assert.equal(await page.locator("#server-drawer").isVisible(), false);
+    const trigger = page.locator("[data-action=select][data-id=browser-added]");
+    assert.ok(await trigger.evaluate(el => el === document.activeElement));
+    const before = await trigger.boundingBox();
+    await trigger.click();
+    assert.deepEqual(await trigger.boundingBox(), before);
+    await page.getByRole("button", { name: "关闭详情" }).click();
     await page.locator("[data-view=activity]").click();
     await page.locator("#activity-rows").getByText("添加服务器").first().waitFor();
     await page.locator("#activity-event").selectOption("connection");
@@ -138,6 +146,7 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
       ),
       "Page has horizontal overflow",
     );
+    await trigger.click();
     await page.locator("[data-action=delete]").click();
     await page.locator("#confirm-dialog button[value=confirm]").click();
     await page

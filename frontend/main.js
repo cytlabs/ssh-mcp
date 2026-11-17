@@ -1,4 +1,4 @@
-import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, serverDetail, activityColumns, mountCommands } from "./components.js";
+import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, renderServerDetail, activityColumns, mountCommands } from "./components.js";
 const navigation = mountNavigation(document.querySelector(".sidebar nav"));
 
 const $ = (selector) => document.querySelector(selector);
@@ -151,6 +151,7 @@ function logout() {
   state = null;
   selected = null;
   selectedSession = null;
+  syncDrawer();
   probes.clear();
   outputs.clear();
   $("#page-content").replaceChildren();
@@ -289,7 +290,26 @@ function renderServers() {
   $("#status-filter").addEventListener("change", e => { serverStatus = e.target.value; serverPage = 1; renderServerRows(); });
   renderServerRows();
 }
+const drawer = $("#server-drawer");
+function syncDrawer() {
+  const row = state?.servers.find(server => server.id === selected);
+  renderServerDetail(drawer, row, probes.get(selected));
+  if (row && !drawer.open) drawer.showModal();
+  if (!row && drawer.open) drawer.close();
+}
+function closeDrawer() {
+  const id = selected;
+  selected = null;
+  syncDrawer();
+  const opener = [...document.querySelectorAll(".server-name")].find(button => button.dataset.id === id);
+  (opener || $("#server-search"))?.focus({ preventScroll: true });
+}
+drawer.addEventListener("cancel", e => { e.preventDefault(); closeDrawer(); });
+drawer.addEventListener("click", e => {
+  if (e.target === drawer && e.clientX < drawer.getBoundingClientRect().left) closeDrawer();
+});
 function renderServerRows() {
+  syncDrawer();
   const term = search.trim().toLowerCase();
   const filtered = state.servers.filter(x => {
     const p = probes.get(x.id), status = p?.type === "ok" ? "ok" : p?.type === "failed" ? "failed" : "untested";
@@ -312,8 +332,7 @@ function renderServerRows() {
         <select id="server-page-size" aria-label="每页条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select>
       </div>` :
       '<div class="empty"><h3>没有匹配的服务器</h3><button class="secondary" data-action="clear-search">清除筛选</button></div>';
-  if (count) mountTable($("#server-rows .vue-table"), rows, serverColumns(probes, selected), row => row.id === selected ? "server-row selected" : "server-row",
-    { selected, detail: row => serverDetail(row, probes.get(row.id)) });
+  if (count) mountTable($("#server-rows .vue-table"), rows, serverColumns(probes), () => "server-row");
   const size = $("#server-page-size");
   if(size){ size.value = String(serverSize); size.addEventListener("change", e => { serverSize = Number(e.target.value); serverPage = 1; renderServerRows(); }); }
 }
@@ -631,10 +650,10 @@ document.addEventListener("click", (event) => {
     else if (action === "server-next") { serverPage++; renderServerRows(); }
     else if (action === "activity-prev") { activityPage = Math.max(1,activityPage-1); loadActivity(); }
     else if (action === "activity-next") { activityPage++; loadActivity(); }
-    else if (action === "close-detail") { selected = null; renderServerRows(); }
+    else if (action === "close-detail") closeDrawer();
     else if (action === "select") {
-      selected = selected === id ? null : id;
-      renderServerRows();
+      selected = id;
+      syncDrawer();
 
     } else if (action === "clear-search") {
       search = ""; authFilter = "all"; serverStatus = "all"; serverPage = 1; renderServers();

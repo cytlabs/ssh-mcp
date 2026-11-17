@@ -1,4 +1,4 @@
-import { createApp, h, reactive, ref } from "vue";
+import { createApp, h, reactive, ref, render } from "vue";
 import PrimeVue from "primevue/config";
 import Button from "primevue/button";
 import DataTable from "primevue/datatable";
@@ -37,21 +37,19 @@ export function mountSettings(element, props) {
   pageApp = createApp(Settings, props);
   pageApp.use(PrimeVue, { unstyled: true, ripple: false }).mount(element);
 }
-export function mountTable(element, rows, columns, rowClass, expansion) {
+export function mountTable(element, rows, columns, rowClass) {
   releasePage();
   pageApp = createApp({ render: () => h(DataTable, {
-    expandedRows: expansion?.selected ? { [expansion.selected]: true } : {},
     value: rows, rowClass, class: "table-wrap", dataKey: "id",
-  }, { expansion: expansion && (({ data }) => expansion.detail(data)),
-    default: () => columns.map(([header, field, cell]) =>
+  }, { default: () => columns.map(([header, field, cell]) =>
     h(Column, { key: field, field, header }, cell ? { body: ({ data }) => cell(data) } : {})) }) });
   pageApp.use(PrimeVue, { unstyled: true, ripple: false }).mount(element);
 }
 
 const status = (type, text) => h(Tag, { class: ["badge", type], value: text });
-export function serverColumns(probes, selected) {
+export function serverColumns(probes) {
   return [
-    ["名称", "id", r => h(Button, { class: "server-name", "aria-expanded": selected === r.id, "data-action": "select", "data-id": r.id }, {
+    ["名称", "id", r => h(Button, { class: "server-name", "aria-haspopup": "dialog", "aria-controls": "server-drawer", "data-action": "select", "data-id": r.id }, {
       default: () => [h("span", { class: "server-icon" }, "▤"), h("span", [h("strong", r.id), h("small", r.description)])],
     })],
     ["主机地址", "host", r => r.host + ":" + r.port], ["SSH 用户", "username"],
@@ -71,20 +69,24 @@ export function serverColumns(probes, selected) {
       "data-action": "test", "data-id": r.id })],
   ];
 }
-export function serverDetail(row, probe) {
+export function renderServerDetail(element, row, probe) {
+  if (!row) { render(null, element); return; }
   const fields = [["地址", row.host + ":" + row.port], ["登录用户", row.username],
     ["认证方式", row.private_key ? "SSH 私钥" : "密码认证"], ["凭据引用", row.private_key || row.password_env],
     ["主机公钥", row.known_hosts], ["最近测试", probe?.checkedAt || "未检测"]];
-  return h("section", { id: "server-detail", class: "detail" }, [
-    h("div", { class: "detail-heading" }, [h("h3", row.id), h("p", row.description),
+  render(h("section", { id: "server-detail" }, [
+    h("header", { class: "drawer-heading" }, [h("div", [h("h2", { id: "drawer-title" }, row.id), row.description && h("p", row.description)]),
       h("button", { class: "icon-button", "data-action": "close-detail", "aria-label": "关闭详情" }, "×")]),
-    h("dl", { class: "details" }, fields.map(([k,v]) => h("div", [h("dt", k), h("dd", v)]))),
-    h("div", { class: "inline-actions" }, [
+    h("div", { class: "drawer-body" }, [h("h3", "SSH 连接"),
+      h("dl", { class: "details" }, fields.map(([k,v]) => h("div", [h("dt", k), h("dd", v)]))),
+      probe?.text && status(probe.type, probe.text),
+      probe?.type === "failed" && h("p", { class: "detail-foot" }, probe.message),
+    ]),
+    h("footer", { class: "drawer-actions" }, [
       ["edit", "primary", "编辑服务器"], ["test", "secondary", "测试连接"], ["delete", "text-link", "移除服务器"],
     ].map(([action, cls, label]) => h("button", { class: cls, "data-action": action, "data-id": row.id,
       disabled: action === "test" && probe?.type === "running" }, label))),
-    probe?.message && h("p", { class: "detail-foot" }, probe.message),
-  ]);
+  ]), element);
 }
 export function activityColumns(labels, formatTime) {
   return [["时间", "timestamp", r => formatTime(r.timestamp)],
