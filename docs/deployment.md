@@ -63,7 +63,7 @@ cp deploy/.env.example deploy/.env
 - 替换或删除示例目标；凭据路径放在 `/config` 内，使用相对 `secrets/...` 或绝对 `/config/secrets/...`。
 - 把所需私钥和已经核验的 `known_hosts` 放入 `deploy/config/secrets`。
 
-编辑 `deploy/.env`，设置相同的 `SSH_MCP_DOMAIN`，分别生成随机且不同的 `SSH_MCP_TOKEN`
+编辑 `deploy/.env`，设置相同的 `SSH_MCP_DOMAIN`。示例令牌默认留空，检查和启动会拒绝旧模板占位值。旧 Token 模式需分别生成随机且不同的 `SSH_MCP_TOKEN`
 和 `SSH_MCP_ADMIN_TOKEN`（仅旧 Token 模式需要）；推荐 OAuth 模式无需这两个变量，只保留配置实际引用的 SSH 密码/口令环境变量。
 可以用 `ssh-mcp generate-token`，或 `python3 -c 'import secrets; print(secrets.token_urlsafe(48))'` 生成 Token。
 真实配置、`.env`、服务器清单和私钥不能提交到仓库。

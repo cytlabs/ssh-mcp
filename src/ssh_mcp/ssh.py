@@ -73,8 +73,9 @@ class SSHManager:
         async with self.lock:
             if self.stopping:
                 raise InputError("Server is shutting down")
-            if len(self.terminals) + self.pending >= self.config.max_sessions:
-                raise InputError("Session limit reached; close completed sessions first")
+            active = sum(t.status == "running" for t in self.terminals.values())
+            if active + self.pending >= self.config.max_sessions:
+                raise InputError("Session limit reached; wait for or close a running session")
             self.pending += 1
         connection = None
         try:
@@ -152,6 +153,18 @@ class SSHManager:
                 await asyncio.wait_for(terminal.connection.wait_closed(), 3)
             terminal.finished_at = time.monotonic()
             terminal.changed.set()
+            self._trim_results()
+
+    def _trim_results(self) -> None:
+        finished = sorted((t for t in self.terminals.values() if t.finished_at is not None),
+                          key=lambda t: t.finished_at, reverse=True)
+        # Allow a single full result even if an operator chooses a smaller cache budget.
+        budget = max(self.config.max_retained_chars, 2 * self.config.buffer_chars)
+        used = 0
+        for index, result in enumerate(finished):
+            used += (result.stdout.end - result.stdout.start) + (result.stderr.end - result.stderr.start)
+            if index >= self.config.max_retained_sessions or used > budget:
+                self.terminals.pop(result.id, None)
 
     def get(self, session_id: str) -> Terminal:
         terminal = self.terminals.get(session_id)
@@ -234,11 +247,14 @@ class SSHManager:
 
     async def file(self, server_id: str, action: Literal["read", "write", "delete", "list", "stat"],
                    path: str, data: str = "", encoding: Literal["utf-8", "base64"] = "utf-8",
-                   offset: int = 0, length: int = 65536, truncate: bool = False) -> dict:
+                   offset: int = 0, length: int | None = None, truncate: bool = False) -> dict:
         if not path or "\x00" in path or len(path) > 4096:
             raise InputError("path must contain 1–4096 characters without NUL")
         integer(offset, "offset", 0, 2**53 - 1)
-        integer(length, "length", 1, self.config.max_file_chunk)
+        if action == "read":
+            if length is None:
+                length = min(65536, self.config.max_file_chunk)
+            integer(length, "length", 1, self.config.max_file_chunk)
         if encoding not in ("utf-8", "base64") or action not in ("read", "write", "delete", "list", "stat"):
             raise InputError("Invalid file action or encoding")
         if len(data) > self.config.max_file_chunk * 4:

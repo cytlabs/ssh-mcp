@@ -80,6 +80,8 @@ class Config:
     connect_timeout: int = 15
     file_timeout: int = 60
     max_file_chunk: int = 262_144
+    max_retained_sessions: int = 64
+    max_retained_chars: int = 8_388_608
 
     def server(self, server_id: str) -> Server:
         for server in self.servers:
@@ -89,9 +91,22 @@ class Config:
 
     def token(self) -> str:
         value = os.environ.get(self.token_env, "")
-        if len(value) < 32 or not value.isascii() or any(c.isspace() for c in value):
+        if not valid_token(value):
             raise ConfigError("HTTP requires a random ASCII bearer token of at least 32 characters")
         return value
+
+
+    def http_tokens(self) -> tuple[str, str | None]:
+        token = self.token() if self.auth_mode == "token" or os.environ.get(self.token_env) else ""
+        admin = os.environ.get("SSH_MCP_ADMIN_TOKEN") or None
+        if admin and (not valid_token(admin) or admin == token):
+            raise ConfigError("Configure separate random MCP and administrator tokens")
+        return token, admin
+
+
+def valid_token(value: str) -> bool:
+    return (len(value) >= 32 and value.isascii() and not any(c.isspace() for c in value)
+            and not value.lower().startswith("replace-with-"))
 
 
 def load_config(filename: str | Path) -> Config:
@@ -111,7 +126,8 @@ def parse_config(raw: dict, base: Path) -> Config:
     ranges = {"max_sessions": (1, 1024), "buffer_chars": (1024, 8_388_608),
               "idle_timeout": (1, 604800), "retention_seconds": (1, 86400),
               "connect_timeout": (1, 120), "file_timeout": (1, 3600),
-              "max_file_chunk": (1024, 1_048_576)}
+              "max_file_chunk": (1024, 1_048_576), "max_retained_sessions": (1, 4096),
+              "max_retained_chars": (1024, 268_435_456)}
     fields(limits, set(ranges), "limits")
     kwargs = {k: integer(v, k, *ranges[k]) for k, v in limits.items()}
     for k, v in http.items():

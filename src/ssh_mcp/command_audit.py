@@ -1,10 +1,45 @@
+import asyncio
 import contextlib
+import logging
 import os
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .auth import operator_name, operator_nickname
+from .config import ConfigError
+
+
+def audit_policy():
+    def enabled(name, default):
+        value = os.environ.get(name, default)
+        if value not in ("0", "1"):
+            raise ConfigError(f"{name} must be 0 or 1")
+        return value == "1"
+
+    raw = os.environ.get("SSH_MCP_AUDIT_RETENTION_DAYS", "")
+    if raw and (not raw.isascii() or not raw.isdigit() or len(raw) > 4 or not 1 <= int(raw) <= 3650):
+        raise ConfigError("SSH_MCP_AUDIT_RETENTION_DAYS must be 1–3650 or empty")
+    return (enabled("SSH_MCP_AUDIT_COMMAND_TEXT", "1"), enabled("SSH_MCP_AUDIT_SHELL_INPUT", "0"),
+            int(raw) if raw else None)
+
+
+def prune_content(path, days):
+    if not Path(path).is_file():
+        return
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with contextlib.closing(sqlite3.connect(path)) as db, db:
+        if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='command_audit'").fetchone():
+            db.execute("UPDATE command_audit SET content='' WHERE timestamp < ? AND content <> ''", (cutoff,))
+
+
+async def maintain_audit(path, days):
+    while True:
+        try:
+            await asyncio.to_thread(prune_content, path, days)
+        except sqlite3.Error:
+            logging.getLogger(__name__).warning("Command audit content cleanup could not complete")
+        await asyncio.sleep(3600)
 
 
 def record_dispatch(server_id: str, session_id: str, event: str, content: str,
@@ -12,6 +47,12 @@ def record_dispatch(server_id: str, session_id: str, event: str, content: str,
     path = os.environ.get("SSH_MCP_COMMAND_AUDIT_DB")
     if not path:
         return
+    commands, shell, _ = audit_policy()
+    if not (commands if event == "command" else shell):
+        content = ""
+    if not Path(path).exists():
+        fd = os.open(path, os.O_CREAT | os.O_WRONLY, 0o600)
+        os.close(fd)
     with contextlib.closing(sqlite3.connect(path)) as db, db:
         db.execute("BEGIN IMMEDIATE")
         db.execute("""CREATE TABLE IF NOT EXISTS command_audit (

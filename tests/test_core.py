@@ -96,6 +96,20 @@ class ConfigTests(unittest.TestCase):
         with patch.dict(os.environ, {"SSH_MCP_TOKEN": "x" * 48}):
             self.assertEqual(self.load().token(), "x" * 48)
 
+    def test_optional_tokens_reject_template_values_and_keep_intentional_credentials(self):
+        from ssh_mcp.config import Config
+        config = Config(servers=(), auth_mode="oauth")
+        env = {"SSH_MCP_TOKEN": "", "SSH_MCP_ADMIN_TOKEN": ""}
+        with patch.dict(os.environ, env):
+            self.assertEqual(config.http_tokens(), ("", None))
+            for key in env:
+                with patch.dict(os.environ, {key: "replace-with-" + "placeholder" * 4}):
+                    with self.assertRaises(ConfigError):
+                        config.http_tokens()
+            token = "example-owned-random-" + "x" * 32
+            with patch.dict(os.environ, SSH_MCP_TOKEN=token):
+                self.assertEqual(config.http_tokens()[0], token)
+
     def test_unknown_fields_and_limits(self):
         for limits in ({"max_sessions": 0}, {"file_timeout": True}, {"typo": 10}):
             self.raw["limits"] = limits
