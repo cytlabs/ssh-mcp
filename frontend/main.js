@@ -15,7 +15,7 @@ const escapeHTML = (value) =>
 const storageKey = "ssh-mcp.console.admin";
 const titles = {
   settings: ["设置", "ACCOUNT SETTINGS", "管理控制台登录账号。"],
-  commands: ["命令审计", "COMMAND AUDIT", "查看发送到服务器的命令和交互输入。"],
+  commands: ["命令审计", "COMMAND AUDIT", "查看命令和交互输入的发送记录。正文按服务端审计设置保留。"],
   dashboard: [
     "概览",
     "SYSTEM OVERVIEW",

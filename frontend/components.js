@@ -62,7 +62,13 @@ export function serverColumns(probes) {
     ["服务器", "id", r => h(Button, { class: "server-name", "aria-controls": "server-drawer", "data-action": "select", "data-id": r.id }, {
       default: () => [h("span", { class: "server-icon" }, "▤"), h("span", [h("strong", r.id), h("small", r.host + ":" + r.port)])],
     })],
-    ["连接状态", "status", r => status(probes.get(r.id)?.type, probes.get(r.id)?.text || "未检测")],
+    ["连接状态", "status", r => {
+      const probe = probes.get(r.id);
+      return h("div", { class: "server-status" }, [
+        status(probe?.type, probe?.text || "未检测"),
+        probe?.checkedAt && h("small", { class: "mobile-probe-time" }, "检测于 " + probe.checkedAt),
+      ]);
+    }],
     ["服务器配置", "system_info", r => {
       const probe = probes.get(r.id), info = probe?.systemInfo;
       const capacity = kib => (kib / 1048576).toLocaleString("zh-CN", { maximumFractionDigits: 1 }) + " GiB";
@@ -87,15 +93,18 @@ export function renderServerDetail(element, row, probe) {
     h("header", { class: "drawer-heading" }, [h("div", [h("h2", { id: "drawer-title" }, row.id), row.description && h("p", row.description)]),
       h("button", { class: "icon-button", "data-action": "close-detail", "aria-label": "关闭详情" }, "×")]),
     h("div", { class: "drawer-body" }, [
-      status(probe?.type, probe?.text || "未检测"),
+      h("div", { class: "detail-check" }, [
+        status(probe?.type, probe?.text || "未检测"),
+        h("button", { class: "secondary", "data-action": "test", "data-id": row.id,
+          disabled: probe?.type === "running" }, "重新检测"),
+      ]),
       probe?.type === "failed" && h("p", { class: "detail-foot" }, probe.message),
       h("h3", "SSH 连接"),
       h("dl", { class: "details" }, fields.map(([k,v]) => h("div", [h("dt", k), h("dd", v)]))),
     ]),
     h("footer", { class: "drawer-actions" }, [
-      ["test", "primary", "重新检测"], ["edit", "secondary", "编辑配置"], ["delete", "text-link", "移除服务器"],
-    ].map(([action, cls, label]) => h("button", { class: cls, "data-action": action, "data-id": row.id,
-      disabled: action === "test" && probe?.type === "running" }, label))),
+      ["edit", "secondary", "编辑配置"], ["delete", "text-link", "移除服务器"],
+    ].map(([action, cls, label]) => h("button", { class: cls, "data-action": action, "data-id": row.id }, label))),
   ]), element);
 }
 export function activityColumns(labels, formatTime) {
@@ -114,7 +123,7 @@ export function mountCommands(element, rows) {
   const selected = ref(null);
   const records = rows.map(row => ({ ...row, ...describeCommand(row.content) }));
   function preview(row) {
-    if (!row.content) return h("span", { class: "muted" }, "未记录正文");
+    if (!row.content) return h("span", { class: "muted" }, (row.event === "shell_input" ? "交互输入" : "命令") + " · 未保留正文");
     const expanded = selected.value === row.id;
     return h(Button, { class: "command-preview", "aria-expanded": expanded,
       "aria-controls": expanded ? "reader-" + row.id : undefined,
