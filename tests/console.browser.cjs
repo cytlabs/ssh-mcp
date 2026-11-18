@@ -72,6 +72,9 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator(".command-preview").filter({hasText:"pwd"}).waitFor();
     assert.equal(await page.locator(".command-preview").count(), 6);
     assert.equal(await reader.count(), 0);
+    fs.mkdirSync(path.join(root, "test-results"), { recursive: true });
+    await page.locator(".command-preview").first().click();
+    await page.screenshot({ path: path.join(root, "test-results/command-audit-desktop.png") });
     await page.locator("#audit-prev").click();
     await page.locator(".command-preview").filter({hasText:"python3 -m unittest"}).waitFor();
     await page.locator("#audit-pager").getByLabel("跳到页码").fill("2");
@@ -115,7 +118,6 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator("#server-dialog").waitFor({ state: "hidden" });
     await page.locator("#server-detail [data-action=test][data-id=browser-added]").click();
     await page.locator("#server-detail .badge.ok").waitFor();
-    fs.mkdirSync(path.join(root, "test-results"), { recursive: true });
     await page.screenshot({
       path: path.join(root, "test-results/console-desktop.png"),
       fullPage: true,
@@ -148,6 +150,9 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await mobileStatus.getByText("可连接", {exact:false}).waitFor();
     const mobileBox = await mobileStatus.boundingBox();
     assert.ok(mobileBox.x >= 0 && mobileBox.x + mobileBox.width <= 390);
+    const mobileTable = await page.locator("#server-rows table").boundingBox();
+    const firstRow = await page.locator("tr.server-row").first().boundingBox();
+    assert.ok(firstRow.y - mobileTable.y < 5, "Mobile cards should start at the top of their list");
     await page.screenshot({
       path: path.join(root, "test-results/console-mobile.png"),
       fullPage: true,
@@ -164,6 +169,15 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page
       .locator("[data-action=select][data-id=browser-added]")
       .waitFor({ state: "hidden" });
+    await page.locator("#mobile-nav-toggle").click();
+    await page.locator("[data-view=commands]").click();
+    await page.locator("#audit-page-size").selectOption("10");
+    await page.locator("#audit-pager").getByText("共 26 条 · 第 1 / 3 页").waitFor();
+    await page.locator("#audit-pager").getByLabel("跳到页码").fill("3");
+    await page.locator("#audit-pager").getByRole("button", {name:"跳转"}).click();
+    await page.locator("#audit-pager").getByText("共 26 条 · 第 3 / 3 页").waitFor();
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+    await page.screenshot({ path: path.join(root, "test-results/command-audit-mobile.png"), fullPage: true });
     await page.locator("#account-menu summary").click();
     await page.locator("#logout").click();
     await page.reload();

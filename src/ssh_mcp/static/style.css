@@ -358,7 +358,7 @@ body:has(#server-drawer[open]:not(.inline-detail)){overflow:hidden}
   .list-page .pager{flex-wrap:wrap}
   .server-list .table-wrap,.command-ledger .table-wrap,#activity-rows .table-wrap{overflow:visible}
   .server-list .table-wrap table,.command-ledger .table-wrap table,#activity-rows .table-wrap table{display:block;width:100%;min-width:0}
-  .server-list thead,.command-ledger thead,#activity-rows thead{position:absolute;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}
+  .server-list thead,.command-ledger thead,#activity-rows thead{position:absolute!important;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}
   .server-list tbody,.command-ledger tbody,#activity-rows tbody{display:block}
   .server-list tbody tr,.command-ledger tbody tr,#activity-rows tbody tr{display:grid;gap:6px 10px;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
   .server-list tbody tr:last-child,.command-ledger tbody tr:last-child,#activity-rows tbody tr:last-child{border-bottom:0}

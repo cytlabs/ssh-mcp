@@ -56,7 +56,7 @@ async def system_info(connection):
 
 
 def connection_failure(exc):
-    if isinstance(exc, asyncio.TimeoutError):
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
         return "连接超时", "请检查网络路由、防火墙和 SSH 端口，再重新检测。"
     if isinstance(exc, ConnectionRefusedError):
         return "连接被拒绝", "请确认目标 SSH 服务已启动且端口正确。"
