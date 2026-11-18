@@ -41,6 +41,13 @@ for (const startupDelay of [0, 3000]) test(
       if (value !== undefined) this.returnValue = value;
       this.dispatchEvent(new w.Event("close"));
     };
+    let tick;
+    const startInterval = w.setInterval.bind(w);
+    w.setInterval = (callback, delay, ...args) => {
+      if (delay !== 60000) return startInterval(callback, delay, ...args);
+      tick = callback;
+      return 1;
+    };
     w.fetch = (url, options) => bridge.fetch(url, options);
     const errors = [];
     w.addEventListener("error", (event) => errors.push(event.error));
@@ -152,6 +159,36 @@ for (const startupDelay of [0, 3000]) test(
       );
       click("[data-action=test][data-id=browser-added]");
       await wait(() => $("#server-rows").textContent.includes("可连接"));
+      const row = $("[data-action=select][data-id=browser-added]").closest("tr");
+      assert.equal($("#server-detail").closest("dialog"), $("#server-drawer"));
+      assert.equal($("#server-drawer").open, true);
+      assert.match(row.textContent, /Fixture Linux.*CPU 4 线程.*内存 8 GiB.*根分区 50 GiB/);
+      click("[data-action=close-detail]");
+      assert.equal($("#server-drawer").open, false);
+    });
+    await step("轮询保留当前服务器的键盘焦点", async () => {
+      const row = $(".server-name");
+      row.focus();
+      await tick();
+      assert.equal(row.isConnected, true);
+      assert.equal(doc.activeElement, row);
+    });
+    await step("命令审计可设置每页条数、跳页和筛选", async () => {
+      click("[data-view=commands]");
+      await wait(() => $("#audit-page-size"));
+      const size = $("#audit-page-size");
+      size.value = "20";
+      size.dispatchEvent(new w.Event("change"));
+      await wait(() => doc.querySelectorAll(".command-preview").length === 20);
+      click("#audit-next");
+      await wait(() => $("#audit-rows").textContent.includes("pwd"));
+      assert.match($("#audit-pager").textContent, /第 2 \/ 2 页/);
+      $("#audit-search").value = "hostname";
+      $("#audit-search").dispatchEvent(new w.Event("input"));
+      await wait(() => $("#audit-pager").textContent.includes("共 1 条"));
+      assert.equal($("#audit-prev").disabled, true);
+      assert.equal($("#audit-next").disabled, true);
+      assert.equal(w.localStorage.getItem("ssh-mcp.page-size.audit"), "20");
     });
     await step("操作记录支持按类别筛选", async () => {
       click("[data-view=activity]");

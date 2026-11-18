@@ -5,7 +5,9 @@ Never load user configuration or bind a public interface. Not a production serve
 
 import argparse
 import asyncio
+from contextlib import asynccontextmanager
 import json
+import os
 import sys
 import tempfile
 import time
@@ -15,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from ssh_mcp.command_audit import record_dispatch
 from ssh_mcp.config import parse_config
 from ssh_mcp.console import Console
 from ssh_mcp.registry import Registry
@@ -32,8 +35,16 @@ class FixtureManager:
     async def connect(self, server):
         async def wait_closed():
             pass
+        @asynccontextmanager
+        async def create_process(*args, **kwargs):
+            stdout = asyncio.StreamReader()
+            stdout.feed_data(b"Fixture Linux\n4\n8388608\n52428800\n")
+            stdout.feed_eof()
+            async def read(size):
+                return (await stdout.read(size)).decode()
+            yield SimpleNamespace(stdout=SimpleNamespace(read=read))
         await asyncio.sleep(0.05)
-        return SimpleNamespace(close=lambda: None, wait_closed=wait_closed)
+        return SimpleNamespace(close=lambda: None, wait_closed=wait_closed, create_process=create_process)
 
     async def start(self, server_id, pty=False):
         self.config.server(server_id)
@@ -76,6 +87,12 @@ def main():
              "known_hosts": "/etc/ssh-mcp/known_hosts", "password_env": "LAB_SSH_PASSWORD"},
         ]}, Path(temp))
         registry = Registry(config, Path(temp) / "fixture.sqlite3")
+        os.environ["SSH_MCP_COMMAND_AUDIT_DB"] = str(Path(temp) / "audit.sqlite3")
+        os.environ["SSH_MCP_AUDIT_COMMAND_TEXT"] = "1"
+        script = "set -eu\r\ncd /opt/example\r\npython3 -m unittest\r\necho '<b>test</b>'\r\n"
+        commands = ["pwd", *(f"echo sample-{i}" for i in range(23)), "hostname", script]
+        for command in commands:
+            record_dispatch("staging", "fixture", "command", command, "ops")
         manager = FixtureManager(config)
 
         async def fallback(scope, receive, send):

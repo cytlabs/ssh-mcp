@@ -59,3 +59,20 @@ class CommandAuditTests(unittest.TestCase):
             ])
             self.assertTrue(all(datetime.fromisoformat(r[0]).utcoffset().total_seconds() == 0
                                 for r in rows))
+
+    def test_paged_results_keep_snapshot_while_new_commands_arrive(self):
+        with tempfile.TemporaryDirectory() as directory, patch.dict(os.environ, {
+            "SSH_MCP_COMMAND_AUDIT_DB": str(Path(directory) / "audit.db"),
+            "SSH_MCP_AUDIT_COMMAND_TEXT": "1",
+        }):
+            for i in range(25):
+                record_dispatch("alpha", "one", "command", f"cmd-{i}")
+            first = command_history(2**63 - 1, page=1, size=10)
+            record_dispatch("alpha", "one", "command", "new")
+            second = command_history(2**63 - 1, page=2, size=10, snapshot=first["snapshot"])
+            self.assertEqual((first["total"], second["total"]), (25, 25))
+            self.assertEqual(second["items"][0]["content"], "cmd-14")
+            last = command_history(2**63 - 1, page=20, size=20)
+            self.assertEqual((last["page"], len(last["items"])), (2, 6))
+            empty = command_history(2**63 - 1, "missing", page=3, size=50)
+            self.assertEqual((empty["page"], empty["total"]), (1, 0))

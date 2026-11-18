@@ -16,7 +16,8 @@
     <img class="logo-mark" src="/console/logo.svg" alt="">
     <span>SSH-MCP</span>
   </a>
-  <nav aria-label="主导航"></nav>
+  <button id="mobile-nav-toggle" type="button" class="icon-button" aria-label="导航菜单" aria-controls="main-navigation" aria-expanded="false">☰</button>
+  <nav id="main-navigation" aria-label="主导航"></nav>
   <div class="sidebar-bottom"><span id="version">v0.1.0</span></div>
 </aside>
 <div class="workspace">
@@ -83,6 +84,7 @@
   <footer><span id="footer-version">SSH-MCP</span></footer>
 </div>
 <div id="toast" class="toast" role="status" hidden></div>
+<dialog id="server-drawer" aria-labelledby="drawer-title"></dialog>
 <dialog id="server-dialog" aria-labelledby="server-dialog-title">
   <form id="server-form">
     <div class="dialog-heading"><h2 id="server-dialog-title">添加服务器</h2><button type="button" class="icon-button" data-close="server-dialog" aria-label="关闭">×</button></div>

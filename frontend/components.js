@@ -1,4 +1,4 @@
-import { createApp, h, reactive, ref } from "vue";
+import { createApp, h, reactive, ref, render, shallowRef } from "vue";
 import PrimeVue from "primevue/config";
 import Button from "primevue/button";
 import DataTable from "primevue/datatable";
@@ -27,10 +27,11 @@ export function mountNavigation(element) {
 }
 
 // Each list uses the same table. Cell renderers receive data as text, including command input.
-let pageApp;
+let pageApp, tableHost, tableData;
 export function releasePage() {
   pageApp?.unmount();
   pageApp = null;
+  tableHost = tableData = null;
 }
 export function mountSettings(element, props) {
   releasePage();
@@ -38,26 +39,73 @@ export function mountSettings(element, props) {
   pageApp.use(PrimeVue, { unstyled: true, ripple: false }).mount(element);
 }
 export function mountTable(element, rows, columns, rowClass) {
+  const next = { rows, columns, rowClass };
+  if (tableHost === element) {
+    tableData.value = next;
+    return;
+  }
   releasePage();
-  pageApp = createApp({ render: () => h(DataTable, {
-    value: rows, rowClass, class: "table-wrap", dataKey: "id",
-  }, { default: () => columns.map(([header, field, cell]) =>
-    h(Column, { key: field, field, header }, cell ? { body: ({ data }) => cell(data) } : {})) }) });
+  tableHost = element;
+  tableData = shallowRef(next);
+  pageApp = createApp({ render() {
+    const model = tableData.value;
+    return h(DataTable, { value: model.rows, rowClass: model.rowClass, class: "table-wrap", dataKey: "id" },
+      { default: () => model.columns.map(([header, field, cell]) =>
+        h(Column, { key: field, field, header }, cell ? { body: ({ data }) => cell(data) } : {})) });
+  } });
   pageApp.use(PrimeVue, { unstyled: true, ripple: false }).mount(element);
 }
 
 const status = (type, text) => h(Tag, { class: ["badge", type], value: text });
 export function serverColumns(probes) {
   return [
-    ["名称", "id", r => h(Button, { class: "server-name", "data-action": "select", "data-id": r.id }, {
-      default: () => [h("span", { class: "server-icon" }, "▤"), h("span", [h("strong", r.id), h("small", r.description)])],
+    ["服务器", "id", r => h(Button, { class: "server-name", "aria-controls": "server-drawer", "data-action": "select", "data-id": r.id }, {
+      default: () => [h("span", { class: "server-icon" }, "▤"), h("span", [h("strong", r.id), h("small", r.host + ":" + r.port)])],
     })],
-    ["主机地址", "host", r => r.host + ":" + r.port], ["SSH 用户", "username"],
+    ["连接状态", "status", r => {
+      const probe = probes.get(r.id);
+      return h("div", { class: "server-status" }, [
+        status(probe?.type, probe?.text || "未检测"),
+        probe?.checkedAt && h("small", { class: "mobile-probe-time" }, "检测于 " + probe.checkedAt),
+      ]);
+    }],
+    ["服务器配置", "system_info", r => {
+      const probe = probes.get(r.id), info = probe?.systemInfo;
+      const capacity = kib => (kib / 1048576).toLocaleString("zh-CN", { maximumFractionDigits: 1 }) + " GiB";
+      const specs = [info?.cpu && 'CPU ' + info.cpu + ' 线程', info?.memory_kib && "内存 " + capacity(info.memory_kib),
+        info?.root_disk_kib && "根分区 " + capacity(info.root_disk_kib)].filter(Boolean);
+      return h("div", { class: "server-specs" }, [
+        info?.os && h("strong", info.os),
+        specs.length ? h("span", specs.join(" · ")) : !info?.os && (probe?.type === "running" ? "采集中…" : probe ? "配置暂不可用" : "待检测"),
+      ]);
+    }],
     ["最近检测", "checked", r => probes.get(r.id)?.checkedAt || "—"],
-    ["状态", "status", r => status(probes.get(r.id)?.type, probes.get(r.id)?.text || "未检测")],
     ["操作", "test", r => h(Button, { label: "立即检测", class: "text-link", disabled: probes.get(r.id)?.type === "running",
       "data-action": "test", "data-id": r.id })],
   ];
+}
+export function renderServerDetail(element, row, probe) {
+  if (!row) { render(null, element); return; }
+  const fields = [["地址", row.host + ":" + row.port], ["登录用户", row.username],
+    ["认证方式", row.private_key ? "SSH 私钥" : "密码认证"], ["凭据引用", row.private_key || row.password_env],
+    ["主机公钥", row.known_hosts], ["最近检测", probe?.checkedAt || "未检测"]];
+  render(h("section", { id: "server-detail" }, [
+    h("header", { class: "drawer-heading" }, [h("div", [h("h2", { id: "drawer-title" }, row.id), row.description && h("p", row.description)]),
+      h("button", { class: "icon-button", "data-action": "close-detail", "aria-label": "关闭详情" }, "×")]),
+    h("div", { class: "drawer-body" }, [
+      h("div", { class: "detail-check" }, [
+        status(probe?.type, probe?.text || "未检测"),
+        h("button", { class: "secondary", "data-action": "test", "data-id": row.id,
+          disabled: probe?.type === "running" }, "重新检测"),
+      ]),
+      probe?.type === "failed" && h("p", { class: "detail-foot" }, probe.message),
+      h("h3", "SSH 连接"),
+      h("dl", { class: "details" }, fields.map(([k,v]) => h("div", [h("dt", k), h("dd", v)]))),
+    ]),
+    h("footer", { class: "drawer-actions" }, [
+      ["edit", "secondary", "编辑配置"], ["delete", "text-link", "移除服务器"],
+    ].map(([action, cls, label]) => h("button", { class: cls, "data-action": action, "data-id": row.id }, label))),
+  ]), element);
 }
 export function activityColumns(labels, formatTime) {
   return [["时间", "timestamp", r => formatTime(r.timestamp)],
@@ -75,6 +123,7 @@ export function mountCommands(element, rows) {
   const selected = ref(null);
   const records = rows.map(row => ({ ...row, ...describeCommand(row.content) }));
   function preview(row) {
+    if (!row.content) return h("span", { class: "muted" }, (row.event === "shell_input" ? "交互输入" : "命令") + " · 未保留正文");
     const expanded = selected.value === row.id;
     return h(Button, { class: "command-preview", "aria-expanded": expanded,
       "aria-controls": expanded ? "reader-" + row.id : undefined,
