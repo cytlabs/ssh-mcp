@@ -165,6 +165,23 @@ class ConsoleTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn(b"test-private-secret", data)
         self.assertEqual(self.registry.history()[0]["outcome"], "failed")
 
+    async def test_automatic_probes_record_transitions_separately(self):
+        await self.request("/admin/servers", "POST", {"revision":1,"server":server_data()})
+        server = self.manager.config.server("staging")
+        self.manager.connect.side_effect = TimeoutError()
+        for _ in range(2):
+            result = await self.app.test_connection(server, automatic=True)
+            self.assertEqual(result["reason"], "连接超时")
+        self.manager.connect.side_effect = None
+        await self.app.test_connection(server, automatic=True)
+        events = [row["event"] for row in self.registry.history()]
+        self.assertEqual(events, ["connection.restored", "connection.failed", "server.create"])
+
+    async def test_audit_pagination_rejects_invalid_values(self):
+        for query in (b"size=9", b"page=0", b"snapshot=-1", b"page=2&before=6", b"size=10&size=50"):
+            with self.assertRaises(ValueError):
+                await self.app.dispatch("GET", "/admin/command-audit", {}, query)
+
     async def test_body_validation_limits_and_audit_excludes_input(self):
         self.assertEqual((await self.request("/admin/state", raw=b"{bad-json"))[0], 400)
         self.assertEqual((await self.request("/admin/state", raw=b"x" * 65537))[0], 413)

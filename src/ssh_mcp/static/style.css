@@ -312,7 +312,7 @@ body:has(#consent-view:not([hidden])) .workspace{margin-left:0}
 
 #server-drawer{position:fixed;inset:0 0 0 auto;margin:0;width:min(440px,100%);max-width:100%;height:100dvh;max-height:none;padding:0;border:0;border-left:1px solid var(--line);border-radius:0}
 #server-drawer::backdrop{background:rgb(15 23 42 / 22%)}
-body:has(#server-drawer[open]){overflow:hidden}
+body:has(#server-drawer[open]:not(.inline-detail)){overflow:hidden}
 #server-detail{min-height:100%;display:flex;flex-direction:column}
 .drawer-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:26px 24px 20px;border-bottom:1px solid var(--line)}
 .drawer-heading h2{margin:0;font-size:21px;overflow-wrap:anywhere}
@@ -323,3 +323,52 @@ body:has(#server-drawer[open]){overflow:hidden}
 .drawer-body .details dd{font-size:13px}
 .drawer-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:16px 24px;border-top:1px solid var(--line)}
 .drawer-actions [data-action=delete]{margin-left:auto;color:var(--red)}
+
+#mobile-nav-toggle{display:none}
+.server-layout,.server-list,.server-layout .vue-table{min-width:0}
+.server-layout.with-detail{display:grid;grid-template-columns:minmax(0,1fr) minmax(270px,30%);gap:22px;align-items:start}
+#server-drawer.inline-detail{position:sticky;inset:12px auto auto;width:100%;height:auto;max-height:calc(100vh - 24px);margin:0;border:1px solid var(--line);border-radius:8px}
+.inline-detail .drawer-heading,.inline-detail .drawer-body,.inline-detail .drawer-actions{padding:16px}
+.drawer-body>h3{margin-top:20px}
+.drawer-body .detail-foot{margin-top:8px}
+.server-list table,.server-layout.with-detail .server-list table{min-width:0}
+.server-list .server-name{max-width:100%;min-width:0;text-align:left}
+.server-list .server-name small{font-family:var(--mono);font-weight:400}
+.server-list .server-name strong,.server-list .server-name small{display:block}
+.server-list .selected .server-name{color:var(--accent-text)}
+.server-layout.with-detail .server-list :is(th,td){padding:10px 8px}
+.server-layout.with-detail .server-list :is(th,td):last-child{display:none}
+.pager .page-jump{display:flex;align-items:center;gap:5px}
+.page-jump input{width:4.2em;min-width:0;padding:5px}
+.list-page nav.pager button,.list-page nav.pager select{border:1px solid var(--line);width:auto;margin:0;padding:6px 10px;min-height:32px;border-radius:6px}
+.list-page nav.pager{flex-direction:row}
+#server-rows [hidden]{display:none!important}
+@media(max-width:700px){
+  .sidebar{display:grid;grid-template-columns:1fr auto;align-items:center;gap:0;padding:8px 16px}
+  .sidebar .brand{margin:0;min-height:36px}
+  #mobile-nav-toggle{display:block}
+  .sidebar nav,.sidebar .sidebar-bottom{display:none}
+  #mobile-nav-toggle[aria-expanded=true]+nav{display:flex;grid-column:1/-1;margin-top:8px}
+  .topbar{height:38px;min-height:0;justify-content:flex-end}
+  #breadcrumb{display:none}
+  .page-heading{flex-direction:row;align-items:center;gap:6px;margin-bottom:14px;padding-bottom:12px}
+  .page-heading p{display:none}
+  .heading-actions{width:auto}
+  .list-toolbar{gap:6px}
+  .list-page .pager{flex-wrap:wrap}
+  .server-list .table-wrap,.command-ledger .table-wrap,#activity-rows .table-wrap{overflow:visible}
+  .server-list .table-wrap table,.command-ledger .table-wrap table,#activity-rows .table-wrap table{display:block;width:100%;min-width:0}
+  .server-list thead,.command-ledger thead,#activity-rows thead{position:absolute;clip-path:inset(100%);width:1px;height:1px;overflow:hidden}
+  .server-list tbody,.command-ledger tbody,#activity-rows tbody{display:block}
+  .server-list tbody tr,.command-ledger tbody tr,#activity-rows tbody tr{display:grid;gap:6px 10px;grid-template-columns:minmax(0,1fr) auto;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+  .server-list tbody tr:last-child,.command-ledger tbody tr:last-child,#activity-rows tbody tr:last-child{border-bottom:0}
+  .server-list tbody td,.command-ledger tbody td,#activity-rows tbody td{display:block;height:auto;min-width:0;padding:0;border:0}
+  .server-list tbody td:nth-child(n+3){display:none}
+  .server-list .server-name{width:100%;padding:0;min-height:40px}
+  .server-list .server-icon{display:none}
+  .command-ledger tbody td:last-child,.command-ledger tbody td[colspan]{grid-column:1/-1}
+  .command-ledger tbody td:nth-child(3){font-size:12px;color:var(--muted)}
+  .command-ledger .command-reader{min-width:0}
+  .server-list .list-toolbar{margin-bottom:8px}
+  .command-ledger .list-toolbar input[type=date]{width:auto}
+}

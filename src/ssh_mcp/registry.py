@@ -96,7 +96,11 @@ class Registry:
     def _record(self, event: str, target: str, outcome: str) -> None:
         self.db.execute("INSERT INTO audit(timestamp,event,target,outcome) VALUES (?,?,?,?)",
                         (datetime.now(timezone.utc).isoformat(), event, target, outcome))
-        self.db.execute("DELETE FROM audit WHERE id NOT IN (SELECT id FROM audit ORDER BY id DESC LIMIT 1000)")
+        automatic = event in ("connection.failed", "connection.restored")
+        group = "event IN ('connection.failed','connection.restored')" if automatic else (
+            "event NOT IN ('connection.failed','connection.restored')")
+        self.db.execute(f"DELETE FROM audit WHERE id IN (SELECT id FROM audit WHERE {group} "
+                        "ORDER BY id DESC LIMIT -1 OFFSET ?)", (250 if automatic else 1000,))
 
     def record(self, event: str, target: str, outcome: str = "ok") -> None:
         with self.db:
@@ -116,7 +120,8 @@ class Registry:
                 "server.create": "添加服务器", "server.update": "编辑服务器",
                 "server.delete": "移除服务器", "connection.test": "测试连接",
                 "session.create": "创建会话", "session.close": "关闭会话",
-                "session.input": "发送会话输入",
+                "session.input": "发送会话输入", "connection.failed": "连接异常",
+                "connection.restored": "恢复连接",
             }
             aliases = [key for key, name in labels.items() if search in name]
             sql = "(instr(lower(event),lower(?)) > 0 OR instr(lower(target),lower(?)) > 0"
@@ -139,6 +144,7 @@ class Registry:
             params.append(end)
         where = " WHERE " + " AND ".join(clauses) if clauses else ""
         total = self.db.execute("SELECT COUNT(*) FROM audit" + where, params).fetchone()[0]
+        page = min(page, max(1, (total + size - 1) // size))
         rows = self.db.execute(
             "SELECT id,timestamp,event,target,outcome FROM audit" + where
             + " ORDER BY id DESC LIMIT ? OFFSET ?",

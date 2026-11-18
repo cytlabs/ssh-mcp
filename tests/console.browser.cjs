@@ -52,13 +52,6 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     await page.locator("#app-view").waitFor({ state: "visible" });
     await page.locator(".overview-stats").waitFor();
     const script = "set -eu\r\ncd /opt/example\r\npython3 -m unittest\r\necho '<b>test</b>'\r\n";
-    const auditRow = { operator: "fixture", server_id: "dev", timestamp: "2026-11-14T01:00:00Z", event: "command" };
-    await page.route("**/admin/command-audit?**", route => {
-      const second = new URL(route.request().url()).searchParams.has("before");
-      return route.fulfill({json: {enabled: true, more: !second, rows: second
-        ? [{...auditRow, id: 1, content: "pwd"}]
-        : [{...auditRow, id: 3, content: script}, {...auditRow, id: 2, content: "hostname"}]}});
-    });
     await page.locator("[data-view=commands]").click();
     await page.locator(".command-preview").first().click();
     const reader = page.locator(".command-reader");
@@ -72,11 +65,24 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     assert.equal((await page.evaluate(() => navigator.clipboard.readText())).replace(/\r\n/g,"\n"), script.replace(/\r\n/g,"\n"));
     await page.locator(".command-preview").last().click();
     assert.equal(await reader.count(), 1);
+    await page.locator("#audit-page-size").selectOption("20");
+    await page.locator("#audit-pager").getByText("共 26 条 · 第 1 / 2 页").waitFor();
+    assert.equal(await page.locator(".command-preview").count(), 20);
     await page.locator("#audit-next").click();
     await page.locator(".command-preview").filter({hasText:"pwd"}).waitFor();
+    assert.equal(await page.locator(".command-preview").count(), 6);
     assert.equal(await reader.count(), 0);
     await page.locator("#audit-prev").click();
     await page.locator(".command-preview").filter({hasText:"python3 -m unittest"}).waitFor();
+    await page.locator("#audit-pager").getByLabel("跳到页码").fill("2");
+    await page.locator("#audit-pager").getByRole("button", {name:"跳转"}).click();
+    await page.locator("#audit-pager").getByText("共 26 条 · 第 2 / 2 页").waitFor();
+    await page.locator("#audit-search").fill("hostname");
+    await page.locator("#audit-pager").getByText("共 1 条 · 第 1 / 1 页").waitFor();
+    await page.reload();
+    await page.locator("[data-view=commands]").click();
+    await page.locator("#audit-page-size").waitFor();
+    assert.equal(await page.locator("#audit-page-size").inputValue(), "20");
     assert.equal(await page.locator("nav button[data-view=clients] + button").getAttribute("data-view"), "settings");
     assert.equal(await page.locator("#theme-toggle + #account-menu").count(), 1);
     assert.ok(await page.locator(".brand img").evaluate(img => img.complete && img.naturalWidth > 0));
@@ -118,9 +124,11 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     assert.equal(await page.locator("#server-drawer").isVisible(), false);
     const trigger = page.locator("[data-action=select][data-id=browser-added]");
     assert.ok(await trigger.evaluate(el => el === document.activeElement));
-    const before = await trigger.boundingBox();
     await trigger.click();
-    assert.deepEqual(await trigger.boundingBox(), before);
+    await page.locator(".server-name[data-id=staging]").click();
+    await page.locator("#drawer-title", {hasText:"staging"}).waitFor();
+    await trigger.click();
+    await page.locator("#drawer-title", {hasText:"browser-added"}).waitFor();
     await page.getByRole("button", { name: "关闭详情" }).click();
     await page.locator("[data-view=activity]").click();
     await page.locator("#activity-rows").getByText("添加服务器").first().waitFor();
@@ -136,6 +144,10 @@ const admin = "browser-fixture-only-not-a-real-secret-" + "x".repeat(32);
     assert.equal(await page.locator("[data-action=client][data-id=ChatGPT]").count(), 0);
     await page.locator("[data-view=servers]").click();
     await page.setViewportSize({ width: 390, height: 844 });
+    const mobileStatus = page.locator("tr.server-row").filter({has:trigger}).locator("td").nth(1);
+    await mobileStatus.getByText("可连接", {exact:false}).waitFor();
+    const mobileBox = await mobileStatus.boundingBox();
+    assert.ok(mobileBox.x >= 0 && mobileBox.x + mobileBox.width <= 390);
     await page.screenshot({
       path: path.join(root, "test-results/console-mobile.png"),
       fullPage: true,

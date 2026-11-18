@@ -55,7 +55,7 @@ uv run --no-sync ssh-mcp serve --config config.json
 
 示例配置使用 `http.auth_mode: "oauth"`。第一次启动会生成一次性初始化链接，存放在身份数据库旁的受保护文件中；使用该链接创建用户名和密码。之后通过 `/console` 登录。
 
-控制台管理只保留四个页面：**概览、服务器、操作记录、MCP 接入**。Agent 可通过 MCP 工具使用 Shell、持久会话和文件操作。
+控制台提供**概览、服务器、操作记录、命令审计、MCP 接入和账号设置**。Agent 可通过 MCP 工具使用 Shell、持久会话和文件操作。
 
 ### 接入 AI 客户端
 

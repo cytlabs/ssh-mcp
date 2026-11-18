@@ -7,6 +7,7 @@ import argparse
 import asyncio
 from contextlib import asynccontextmanager
 import json
+import os
 import sys
 import tempfile
 import time
@@ -16,6 +17,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from urllib.parse import urlsplit
 
+from ssh_mcp.command_audit import record_dispatch
 from ssh_mcp.config import parse_config
 from ssh_mcp.console import Console
 from ssh_mcp.registry import Registry
@@ -85,6 +87,12 @@ def main():
              "known_hosts": "/etc/ssh-mcp/known_hosts", "password_env": "LAB_SSH_PASSWORD"},
         ]}, Path(temp))
         registry = Registry(config, Path(temp) / "fixture.sqlite3")
+        os.environ["SSH_MCP_COMMAND_AUDIT_DB"] = str(Path(temp) / "audit.sqlite3")
+        os.environ["SSH_MCP_AUDIT_COMMAND_TEXT"] = "1"
+        script = "set -eu\r\ncd /opt/example\r\npython3 -m unittest\r\necho '<b>test</b>'\r\n"
+        commands = ["pwd", *(f"echo sample-{i}" for i in range(23)), "hostname", script]
+        for command in commands:
+            record_dispatch("staging", "fixture", "command", command, "ops")
         manager = FixtureManager(config)
 
         async def fallback(scope, receive, send):

@@ -1,3 +1,5 @@
+import { reactive } from "vue";
+import { listPagination, renderPager } from "./pagination.js";
 import { mountSettings, mountNavigation, mountTable, releasePage, serverColumns, renderServerDetail, activityColumns, mountCommands } from "./components.js";
 const navigation = mountNavigation(document.querySelector(".sidebar nav"));
 
@@ -46,10 +48,12 @@ let token = "",
   state = null,
   selected = null,
   selectedSession = null;
+const serverList = listPagination("server"), activityList = listPagination("activity"), auditList = listPagination("audit");
+let auditSearch = "", auditDay = "", auditSnapshot = null, auditRequest = 0;
 let search = "",
   authFilter = "all",
-  serverStatus = "all", serverPage = 1, serverSize = 10,
-  activityPage = 1, activitySize = 10, activitySearch = "",
+  serverStatus = "all",
+  activitySearch = "",
   activityEvent = "all", activityOutcome = "all", activityFrom = "", activityTo = "",
   client = "Codex",
   editId = null,
@@ -57,7 +61,7 @@ let search = "",
 let pollTimer,
   pollGeneration = 0,
   toastTimer;
-const probes = new Map(),
+const probes = reactive(new Map()),
   outputs = new Map(),
   requests = new Set();
 
@@ -149,6 +153,10 @@ function logout() {
     /* storage may be disabled */
   }
   state = null;
+  search = activitySearch = auditSearch = auditDay = activityFrom = activityTo = "";
+  authFilter = serverStatus = activityEvent = activityOutcome = "all";
+  serverList.page = activityList.page = auditList.page = 1;
+  auditSnapshot = null;
   selected = null;
   selectedSession = null;
   syncDrawer();
@@ -177,7 +185,7 @@ async function refresh(renderPage = true) {
   state = await api("/state");
   for (const [id, result] of Object.entries(state.checks || {})) {
     probes.set(id, {type: result.ok ? "ok" : "failed",
-      text: result.ok ? `可连接 · ${result.latency_ms} ms` : "连接失败",
+      text: result.ok ? `可连接 · ${result.latency_ms} ms` : result.reason || "连接失败",
       systemInfo: result.system_info, message: result.message || "SSH 登录测试成功。", checkedAt: formatTime(result.checked_at)});
   }
   if (!state.servers.some((s) => s.id === selected))
@@ -240,6 +248,8 @@ function render() {
   $("#page-description").textContent = description;
   $("#add-server").hidden = view !== "servers";
   navigation.view = view;
+  $("#mobile-nav-toggle").setAttribute("aria-expanded", "false");
+  if (drawer.open) drawer.close();
   releasePage();
   ({
     dashboard: renderDashboard,
@@ -260,7 +270,7 @@ function renderDashboard() {
     <div class="overview-stats">
       ${stat("服务器", servers.length, "已配置的服务器", "▤")}
       ${stat("活跃会话", running, "当前服务实例", "⇄")}
-      ${stat("最近记录", (state.activity || []).length, "最多显示最近 50 条", "◷")}
+      ${stat("连接异常", servers.filter(s => probes.get(s.id)?.type === "failed").length, "最近一次检测", "◷")}
     </div>
     <div class="overview-columns">
       <section class="overview-section"><div class="overview-heading"><h2>服务器连通性</h2><button class="text-link" data-view-link="servers">查看全部 →</button></div>
@@ -276,65 +286,85 @@ function renderDashboard() {
     </div>
     <div class="overview-access"><span>⇄</span><div><strong>MCP 接入</strong><p>连接 Codex、Claude Code、Cursor 等客户端。</p></div><button class="text-link" data-view-link="clients">查看配置 →</button></div>`;
 }
+const drawer = $("#server-drawer");
+const wideServers = window.matchMedia?.("(min-width: 1100px)");
+wideServers?.addEventListener("change", () => { if (view === "servers" && state) syncDrawer(); });
+$("#mobile-nav-toggle").onclick = event => {
+  const button = event.currentTarget;
+  button.setAttribute("aria-expanded", String(button.getAttribute("aria-expanded") !== "true"));
+};
 function renderServers() {
   $("#page-content").innerHTML = `
-    <section class="list-page"><div class="list-toolbar">
-      <label class="search"><span>⌕</span><input id="server-search" type="search" aria-label="搜索服务器" value="${escapeHTML(search)}" placeholder="搜索名称、地址或备注"></label>
-      <select id="auth-filter" aria-label="认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select>
-      <select id="status-filter" aria-label="连接测试状态"><option value="all">全部状态</option><option value="ok">可连接</option><option value="failed">连接失败</option><option value="untested">未检测</option></select>
-    </div><div id="server-rows"></div></section>`;
+    <div class="server-layout"><section class="list-page server-list">
+      <div class="list-toolbar">
+        <label class="search"><span>⌕</span><input id="server-search" type="search" aria-label="搜索服务器" placeholder="搜索名称、地址或备注"></label>
+        <select id="status-filter" aria-label="连接状态"><option value="all">全部状态</option><option value="failed">连接异常</option><option value="untested">未检测</option><option value="ok">可连接</option><option value="running">检测中</option></select>
+        <select id="auth-filter" aria-label="认证方式"><option value="all">全部认证方式</option><option value="key">SSH 私钥</option><option value="password">密码认证</option></select>
+      </div>
+      <div id="server-rows"><div class="vue-table"></div><div class="empty" hidden></div></div>
+      <div id="server-pager"></div>
+    </section></div>`;
+  $(".server-layout").append(drawer);
+  $("#server-search").value = search;
   $("#auth-filter").value = authFilter;
   $("#status-filter").value = serverStatus;
-  $("#server-search").addEventListener("input", e => { search = e.target.value; serverPage = 1; renderServerRows(); });
-  $("#auth-filter").addEventListener("change", e => { authFilter = e.target.value; serverPage = 1; renderServerRows(); });
-  $("#status-filter").addEventListener("change", e => { serverStatus = e.target.value; serverPage = 1; renderServerRows(); });
+  $("#server-search").oninput = e => { search = e.target.value; serverList.page = 1; renderServerRows(); };
+  $("#auth-filter").onchange = e => { authFilter = e.target.value; serverList.page = 1; renderServerRows(); };
+  $("#status-filter").onchange = e => { serverStatus = e.target.value; serverList.page = 1; renderServerRows(); };
   renderServerRows();
 }
-const drawer = $("#server-drawer");
 function syncDrawer() {
-  const row = state?.servers.find(server => server.id === selected);
+  const row = view === "servers" && state?.servers.find(server => server.id === selected);
+  const layout = drawer.closest(".server-layout");
+  const inline = Boolean(wideServers?.matches);
+  if (drawer.open && (!row || inline !== drawer.classList.contains("inline-detail"))) drawer.close();
+  drawer.classList.toggle("inline-detail", inline);
+  layout?.classList.toggle("with-detail", Boolean(row && inline));
   renderServerDetail(drawer, row, probes.get(selected));
-  if (row && !drawer.open) drawer.showModal();
-  if (!row && drawer.open) drawer.close();
+  if (row && !drawer.open && layout) {
+    if (inline) drawer.show();
+    else drawer.showModal();
+  }
 }
 function closeDrawer() {
   const id = selected;
   selected = null;
-  syncDrawer();
+  renderServerRows();
   const opener = [...document.querySelectorAll(".server-name")].find(button => button.dataset.id === id);
   (opener || $("#server-search"))?.focus({ preventScroll: true });
 }
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape" && drawer.open && drawer.classList.contains("inline-detail")
+      && !document.querySelector("dialog[open]:not(#server-drawer)")) {
+    e.preventDefault();
+    closeDrawer();
+  }
+});
 drawer.addEventListener("cancel", e => { e.preventDefault(); closeDrawer(); });
 drawer.addEventListener("click", e => {
-  if (e.target === drawer && e.clientX < drawer.getBoundingClientRect().left) closeDrawer();
+  if (e.target === drawer && !drawer.classList.contains("inline-detail") &&
+      e.clientX < drawer.getBoundingClientRect().left) closeDrawer();
 });
 function renderServerRows() {
   syncDrawer();
   const term = search.trim().toLowerCase();
-  const filtered = state.servers.filter(x => {
-    const p = probes.get(x.id), status = p?.type === "ok" ? "ok" : p?.type === "failed" ? "failed" : "untested";
-    return [x.id,x.host,x.description,x.username].some(v => String(v || "").toLowerCase().includes(term))
-      && (authFilter === "all" || (authFilter === "key" ? !!x.private_key : !!x.password_env))
+  const filtered = state.servers.filter(server => {
+    const status = probes.get(server.id)?.type || "untested";
+    return [server.id, server.host, server.description, server.username].some(v => String(v || "").toLowerCase().includes(term))
+      && (authFilter === "all" || (authFilter === "key" ? !!server.private_key : !!server.password_env))
       && (serverStatus === "all" || serverStatus === status);
   });
-  const count = filtered.length, pages = Math.max(1,Math.ceil(count/serverSize));
-  serverPage = Math.min(serverPage,pages);
-  const rows = filtered.slice((serverPage-1)*serverSize, serverPage*serverSize);
-  releasePage();
-  if (!state.servers.length) {
-    $("#server-rows").innerHTML = '<div class="empty"><h3>暂无服务器</h3><p>添加一台 SSH 服务器开始使用。</p><button class="primary" data-action="add">＋ 添加服务器</button></div>';
-    return;
-  }
-  $("#server-rows").innerHTML = count ? `
-    <div class="vue-table"></div>      <div class="pager"><span class="pager-meta">共 ${count} 条 · 第 ${serverPage} / ${pages} 页</span>
-        <button data-action="server-prev" ${serverPage === 1 ? "disabled" : ""}>上一页</button>
-        <button data-action="server-next" ${serverPage >= pages ? "disabled" : ""}>下一页</button>
-        <select id="server-page-size" aria-label="每页条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select>
-      </div>` :
-      '<div class="empty"><h3>没有匹配的服务器</h3><button class="secondary" data-action="clear-search">清除筛选</button></div>';
-  if (count) mountTable($("#server-rows .vue-table"), rows, serverColumns(probes), () => "server-row");
-  const size = $("#server-page-size");
-  if(size){ size.value = String(serverSize); size.addEventListener("change", e => { serverSize = Number(e.target.value); serverPage = 1; renderServerRows(); }); }
+  serverList.page = Math.min(serverList.page, Math.max(1, Math.ceil(filtered.length / serverList.size)));
+  const offset = (serverList.page - 1) * serverList.size;
+  const rows = filtered.slice(offset, offset + serverList.size);
+  const table = $("#server-rows .vue-table"), empty = $("#server-rows .empty");
+  table.hidden = !rows.length;
+  empty.hidden = Boolean(rows.length);
+  if (!rows.length) empty.innerHTML = state.servers.length
+    ? '<h3>没有匹配的服务器</h3><button class="secondary" data-action="clear-search">清除筛选</button>'
+    : '<h3>暂无服务器</h3><button class="primary" data-action="add">添加服务器</button>';
+  mountTable(table, rows, serverColumns(probes), row => row.id === selected ? "server-row selected" : "server-row");
+  renderPager($("#server-pager"), serverList, filtered.length, renderServerRows);
 }
 function editServer(id = null) {
   const form = $("#server-form");
@@ -428,7 +458,7 @@ function renderClients() {
 
 const activityLabels = {
   "server.create":"添加服务器","server.update":"编辑服务器","server.delete":"移除服务器",
-  "connection.test":"测试连接","session.create":"创建会话",
+  "connection.test":"测试连接","connection.failed":"连接异常","connection.restored":"恢复连接","session.create":"创建会话",
   "session.close":"关闭会话","session.input":"发送会话输入"
 };
 function formatTime(value) {
@@ -464,44 +494,55 @@ function renderSettings() {
     },
   });
 }
-function renderCommands(before = null, previous = [], search = "", day = "") {
-  releasePage();
-  const panel = document.createElement("section");
-  panel.className = "list-page command-ledger";
-  panel.innerHTML = `<form class="list-toolbar">
-    <input type="search" aria-label="搜索操作者、服务器或命令" placeholder="搜索操作者、服务器、命令…" maxlength="256">
-    <input type="date" aria-label="本地日期"><button class="primary">查询</button></form>
-    <div class="ledger-results" aria-live="polite">正在加载…</div>`;
-  $("#page-content").replaceChildren(panel);
-  const form = panel.querySelector("form"), [term, date] = form.querySelectorAll("input");
-  term.value = search;
-  date.value = day;
-  form.onsubmit = e => {
-    e.preventDefault();
-    renderCommands(null, [], term.value.trim(), date.value);
-  };
-  const params = new URLSearchParams({search});
-  if (before) params.set("before", before);
-  if (day) {
-    const start = new Date(day + "T00:00:00"), end = new Date(start);
+function renderCommands() {
+  $("#page-content").innerHTML = `<section class="list-page command-ledger">
+    <div class="list-toolbar"><label class="search"><span>⌕</span><input id="audit-search" type="search"
+    aria-label="搜索操作者、服务器或命令" placeholder="搜索操作者、服务器或命令" maxlength="256"></label>
+    <input id="audit-day" type="date" aria-label="本地日期"></div>
+    <div id="audit-rows" aria-live="polite">正在加载…</div><div id="audit-pager"></div></section>`;
+  $("#audit-search").value = auditSearch;
+  $("#audit-day").value = auditDay;
+  function filter() {
+    auditSearch = $("#audit-search").value;
+    auditDay = $("#audit-day").value;
+    auditList.page = 1;
+    auditSnapshot = null;
+    loadAudit();
+  }
+  $("#audit-search").oninput = filter;
+  $("#audit-day").onchange = filter;
+  loadAudit();
+}
+async function loadAudit() {
+  const id = ++auditRequest, container = $("#audit-rows");
+  const params = new URLSearchParams({page: auditList.page, size: auditList.size, search: auditSearch.trim()});
+  if (auditSnapshot !== null) params.set("snapshot", auditSnapshot);
+  if (auditDay) {
+    const start = new Date(auditDay + "T00:00:00"), end = new Date(start);
     end.setDate(end.getDate() + 1);
     params.set("start", start.toISOString());
     params.set("end", end.toISOString());
   }
-  const results = panel.querySelector(".ledger-results");
-  api("/command-audit?" + params).then(data => {
-    if (!panel.isConnected) return;
-    if (!data.rows.length) {
-      results.textContent = !data.enabled ? "服务端尚未启用命令审计" : "没有符合条件的记录";
-      return;
+  try {
+    const data = await api("/command-audit?" + params);
+    if (id !== auditRequest || !container.isConnected) return;
+    auditList.page = data.page;
+    auditSnapshot = data.snapshot;
+    releasePage();
+    if (data.items.length) {
+      container.innerHTML = '<div class="vue-table"></div>';
+      mountCommands(container.firstElementChild, data.items);
+    } else {
+      container.textContent = data.enabled ? "没有符合条件的记录" : "服务端尚未启用命令审计";
     }
-    results.innerHTML = '<div class="vue-table"></div><div class="pager"><span class="pager-meta">本页 ' + data.rows.length + ' 条 · 第 ' + (previous.length + 1) + ' 页</span><button id="audit-prev">上一页</button><button id="audit-next">下一页</button></div>';
-    mountCommands(results.querySelector(".vue-table"), data.rows);
-    $("#audit-prev").disabled = !previous.length;
-    $("#audit-prev").onclick = () => renderCommands(previous.at(-1), previous.slice(0,-1), search, day);
-    $("#audit-next").disabled = !data.more;
-    $("#audit-next").onclick = () => renderCommands(data.rows.at(-1).id, [...previous,before], search, day);
-  }).catch(() => { results.textContent = "加载失败，请重新查询。"; });
+    renderPager($("#audit-pager"), auditList, data.total, loadAudit);
+  } catch (error) {
+    if (id !== auditRequest || !container.isConnected) return;
+    releasePage();
+    container.textContent = "加载失败，请点击刷新重试。";
+    $("#audit-pager").replaceChildren();
+    notify(error.message, true);
+  }
 }
 function renderActivity() {
   $("#page-content").innerHTML = `
@@ -511,41 +552,37 @@ function renderActivity() {
       <select id="activity-outcome" aria-label="操作结果"><option value="all">全部结果</option><option value="ok">成功</option><option value="failed">失败</option></select>
       <input id="activity-from" type="date" aria-label="开始日期" value="${escapeHTML(activityFrom)}">
       <input id="activity-to" type="date" aria-label="结束日期" value="${escapeHTML(activityTo)}">
-    </div><div id="activity-rows">正在加载…</div></section>`;
+    </div><div id="activity-rows">正在加载…</div><div id="activity-pager"></div></section>`;
   $("#activity-event").value = activityEvent; $("#activity-outcome").value = activityOutcome;
-  $("#activity-search").addEventListener("input", e => { activitySearch = e.target.value; activityPage = 1; loadActivity(); });
+  $("#activity-search").addEventListener("input", e => { activitySearch = e.target.value; activityList.page = 1; loadActivity(); });
   for(const [id,key] of [["activity-event","event"],["activity-outcome","outcome"],["activity-from","start"],["activity-to","end"]]){
     $("#" + id).addEventListener("change", e => {
       if(key === "event") activityEvent = e.target.value;
       else if(key === "outcome") activityOutcome = e.target.value;
       else if(key === "start") activityFrom = e.target.value;
       else activityTo = e.target.value;
-      activityPage = 1; loadActivity();
+      activityList.page = 1; loadActivity();
     });
   }
   loadActivity();
 }
 async function loadActivity() {
   const id = ++activityRequestId;
-  const params = new URLSearchParams({page:String(activityPage),size:String(activitySize),search:activitySearch.trim(),
+  const params = new URLSearchParams({page:String(activityList.page),size:String(activityList.size),search:activitySearch.trim(),
     event:activityEvent,outcome:activityOutcome,start:activityFrom,end:activityTo});
   try {
     const data = await api("/activity?" + params.toString());
     if(id !== activityRequestId || view !== "activity" || !$("#activity-rows")) return;
-    const rows = data.items || [], pages = Math.max(1,Math.ceil(data.total/data.size));
+    const rows = data.items || [];
+    activityList.page = data.page;
     releasePage();
     $("#activity-rows").innerHTML = rows.length ? `<div class="vue-table"></div>` :
        '<div class="empty"><h3>没有匹配的操作记录</h3><p>请调整搜索条件。</p></div>';
     if (rows.length) mountTable($("#activity-rows .vue-table"), rows, activityColumns(activityLabels, formatTime));
-    $("#activity-rows").insertAdjacentHTML("beforeend", `<div class="pager">
-      <span class="pager-meta">共 ${data.total} 条 · 第 ${data.page} / ${pages} 页</span>
-      <button data-action="activity-prev" ${data.page <= 1 ? "disabled" : ""}>上一页</button>
-      <button data-action="activity-next" ${data.page >= pages ? "disabled" : ""}>下一页</button>
-      <select id="activity-page-size" aria-label="每页记录条数"><option value="10">10 条/页</option><option value="20">20 条/页</option><option value="50">50 条/页</option></select></div>`);
-    const size = $("#activity-page-size"); size.value = String(activitySize);
-    size.addEventListener("change", e => { activitySize = Number(e.target.value); activityPage = 1; loadActivity(); });
+    renderPager($("#activity-pager"), activityList, data.total, loadActivity);
   } catch(error) {
     if(id === activityRequestId && $("#activity-rows")){
+      $("#activity-pager").replaceChildren();
       $("#activity-rows").innerHTML = '<div class="empty">加载失败，请点击刷新重试。</div>';
       notify(error.message, true);
     }
@@ -553,7 +590,7 @@ async function loadActivity() {
 }
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const button = event.submitter;
+  const button = event.submitter || event.currentTarget.querySelector("button[type=submit]");
   button.disabled = true;
   $("#login-error").textContent = "";
   try {
@@ -580,7 +617,7 @@ $("#logout").addEventListener("click", (event) => busy(event.currentTarget, asyn
   logout();
 }));
 $("#refresh").addEventListener("click", (event) =>
-  busy(event.currentTarget, () => refresh()),
+  busy(event.currentTarget, () => { auditSnapshot = null; return refresh(); }),
 );
 $("#add-server").addEventListener("click", () => editServer());
 $("#server-form").elements.auth.addEventListener("change", authFields);
@@ -640,23 +677,22 @@ document.addEventListener("click", (event) => {
     render();
     return;
   }
-  const button = event.target.closest("[data-action]");
+  let button = event.target.closest("[data-action]");
+  if (!button && event.target.closest(".server-row") && window.getSelection()?.isCollapsed) {
+    button = event.target.closest(".server-row").querySelector(".server-name");
+  }
   if (!button || !state) return;
   const { action, id } = button.dataset;
   busy(button, async () => {
     if (action === "add") editServer();
     else if (action === "edit") editServer(id);
-    else if (action === "server-prev") { serverPage = Math.max(1,serverPage-1); renderServerRows(); }
-    else if (action === "server-next") { serverPage++; renderServerRows(); }
-    else if (action === "activity-prev") { activityPage = Math.max(1,activityPage-1); loadActivity(); }
-    else if (action === "activity-next") { activityPage++; loadActivity(); }
     else if (action === "close-detail") closeDrawer();
     else if (action === "select") {
       selected = id;
-      syncDrawer();
+      renderServerRows();
 
     } else if (action === "clear-search") {
-      search = ""; authFilter = "all"; serverStatus = "all"; serverPage = 1; renderServers();
+      search = ""; authFilter = "all"; serverStatus = "all"; serverList.page = 1; renderServers();
     } else if (action === "test") {
       probes.set(id, { ...probes.get(id), type: "running", text: "连接中" });
       renderServerRows();
@@ -671,7 +707,7 @@ document.addEventListener("click", (event) => {
                 text: `可连接 · ${result.latency_ms} ms`,
                 message: "SSH 登录测试成功。", checkedAt: formatTime(new Date().toISOString()),
               }
-            : { type: "failed", text: "连接失败", message: result.message, checkedAt: formatTime(new Date().toISOString()) },
+            : { type: "failed", text: result.reason || "连接失败", message: result.message, checkedAt: formatTime(new Date().toISOString()) },
         );
         notify(result.ok ? `${id} 连接成功` : result.message, !result.ok);
       } catch (error) {

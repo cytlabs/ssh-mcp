@@ -49,10 +49,26 @@ async def system_info(connection):
         if not remaining or len(lines) != 4:
             return {}
         info = {"os": "".join(c for c in lines[0] if c.isprintable())[:120]}
-        for key, value in zip(("cpu", "memory_kib", "root_disk_kib"), lines[1:]):
+        for key, value in zip(("cpu", "memory_kib", "root_disk_kib"), lines[1:], strict=True):
             if value.isascii() and value.isdigit() and len(value) <= 16 and int(value) > 0:
                 info[key] = int(value)
         return info
+
+
+def connection_failure(exc):
+    if isinstance(exc, asyncio.TimeoutError):
+        return "连接超时", "请检查网络路由、防火墙和 SSH 端口，再重新检测。"
+    if isinstance(exc, ConnectionRefusedError):
+        return "连接被拒绝", "请确认目标 SSH 服务已启动且端口正确。"
+    if isinstance(exc, ConfigError):
+        return "凭据配置有误", "请核对服务端配置引用的凭据是否可用。"
+    if type(exc).__module__.startswith("asyncssh"):
+        import asyncssh
+        if isinstance(exc, asyncssh.PermissionDenied):
+            return "认证失败", "请核对登录用户和凭据引用，再重新检测。"
+        if isinstance(exc, asyncssh.HostKeyNotVerifiable):
+            return "主机公钥未通过校验", "请通过可信渠道核对主机指纹和 known_hosts 文件。"
+    return "连接失败", "请检查网络、目标 SSH 服务和服务端配置。"
 
 
 class Console:
@@ -144,7 +160,7 @@ class Console:
             # Never serialize arbitrary SSH/SQLite exceptions or credential paths.
             await self.respond(send, 502, {"error": "操作未完成。请检查服务端配置、文件权限或 SSH 连接。"})
 
-    async def test_connection(self, server):
+    async def test_connection(self, server, *, automatic=False):
         async with self.probes:
             started = time.monotonic()
             try:
@@ -157,17 +173,24 @@ class Console:
                     connection.close()
                     with contextlib.suppress(asyncio.TimeoutError):
                         await asyncio.wait_for(connection.wait_closed(), 3)
-            except Exception:
-                result = {"ok": False, "message": "连接失败：请检查网络、凭据和主机密钥。"}
+            except Exception as exc:
+                reason, message = connection_failure(exc)
+                result = {"ok": False, "reason": reason, "message": message}
             if server in self.manager.config.servers:
+                previous = self.checks.get(server.id, {}).get("ok")
                 self.checks[server.id] = {**result, "checked_at": datetime.now(timezone.utc).isoformat()}
-                self.registry.record("connection.test", server.id, "ok" if result["ok"] else "failed")
+                outcome = "ok" if result["ok"] else "failed"
+                if not automatic:
+                    self.registry.record("connection.test", server.id, outcome)
+                elif previous != result["ok"] and (previous is not None or not result["ok"]):
+                    event = "connection.restored" if result["ok"] else "connection.failed"
+                    self.registry.record(event, server.id, outcome)
             return result
 
     async def monitor_connections(self):
         while True:
             started = time.monotonic()
-            await asyncio.gather(*(self.test_connection(s) for s in self.manager.config.servers),
+            await asyncio.gather(*(self.test_connection(s, automatic=True) for s in self.manager.config.servers),
                                  return_exceptions=True)
             await asyncio.sleep(max(0, 300 - (time.monotonic() - started)))
 
@@ -181,12 +204,29 @@ class Console:
                     "username": username, "nickname": nickname, "checks": self.checks,
                     "sessions": self.manager.list_sessions(), "activity": self.registry.history()}
         if method == "GET" and path == "/admin/command-audit":
-            options = parse_qs(query.decode(), max_num_fields=4)
-            before = int(options.get("before", [2**63 - 1])[0])
-            if not 0 < before < 2**63:
-                raise InputError("Invalid cursor")
-            return await asyncio.to_thread(command_history, before, options.get("search", [""])[0],
-                                           options.get("start", [""])[0], options.get("end", [""])[0])
+            options = parse_qs(query.decode(), keep_blank_values=True, max_num_fields=7)
+            if any(len(values) != 1 for values in options.values()):
+                raise InputError("Duplicate query parameter")
+            allowed = {"before", "page", "size", "snapshot", "search", "start", "end"}
+            if options.keys() - allowed:
+                raise InputError("Unknown audit filter")
+            values = {k: v[0] for k, v in options.items()}
+            before = int(values.get("before", 2**63 - 1))
+            page = int(values.get("page", 1)) if {"page", "size", "snapshot"} & values.keys() else None
+            size = int(values.get("size", 20))
+            snapshot = int(values["snapshot"]) if "snapshot" in values else None
+            search = values.get("search", "").strip()
+            start, end = values.get("start", ""), values.get("end", "")
+            if not 0 < before < 2**63 or (page is not None and
+                    ("before" in values or not 1 <= page < 2**31 or size not in (10, 20, 50))):
+                raise InputError("Invalid pagination")
+            if (snapshot is not None and not 0 <= snapshot < 2**63) or len(search) > 256:
+                raise InputError("Invalid audit filter")
+            bounds = [datetime.fromisoformat(s.replace("Z", "+00:00")) for s in (start, end) if s]
+            if any(d.tzinfo is None for d in bounds) or (len(bounds) == 2 and bounds[0] >= bounds[1]):
+                raise InputError("Invalid audit time range")
+            return await asyncio.to_thread(command_history, before, search, start, end,
+                                           page=page, size=size, snapshot=snapshot)
         if method == "GET" and path == "/admin/activity":
             options = parse_qs(query.decode("utf-8"), keep_blank_values=True, max_num_fields=12)
             if any(len(values) != 1 for values in options.values()):
