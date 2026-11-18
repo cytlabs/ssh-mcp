@@ -153,6 +153,33 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.connection.process.stdin.text, "echo ok\n")
         self.assertTrue(self.connection.process.stdin.eof)
 
+    async def test_finished_results_have_their_own_bounded_cache(self):
+        self.manager.config = replace(self.config, max_sessions=1, max_retained_sessions=2)
+        ids = []
+        for _ in range(4):
+            connection = Connection()
+            self.manager.connect = AsyncMock(return_value=connection)
+            terminal = await self.manager.start("test", "mock", pty=False)
+            connection.process.finish()
+            await terminal.task
+            ids.append(terminal.id)
+        self.assertEqual(set(self.manager.terminals), set(ids[-2:]))
+        self.assertEqual((await self.manager.read(ids[-1]))["status"], "completed")
+
+    async def test_retained_character_budget_discards_oldest_even_below_count_limit(self):
+        self.manager.config = replace(self.config, max_retained_sessions=10, max_retained_chars=2048)
+        ids = []
+        for _ in range(3):
+            connection = Connection()
+            self.manager.connect = AsyncMock(return_value=connection)
+            terminal = await self.manager.start("test", "mock", pty=False)
+            connection.process.stdout.queue.put_nowait("x" * 768)
+            connection.process.stderr.queue.put_nowait("y" * 256)
+            connection.process.finish()
+            await terminal.task
+            ids.append(terminal.id)
+        self.assertEqual(set(self.manager.terminals), set(ids[1:]))
+
     async def test_concurrent_pending_connections_reserve_capacity(self):
         self.manager.config = replace(self.config, max_sessions=1)
         entered, release = asyncio.Event(), asyncio.Event()

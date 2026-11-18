@@ -6,7 +6,6 @@ import argparse
 import asyncio
 import json
 import getpass
-import os
 import logging
 import secrets
 import sqlite3
@@ -71,8 +70,9 @@ def main() -> None:
                     if path and not path.is_file():
                         raise ConfigError("A configured known_hosts or private key file is missing")
                 server.credentials()
-            if config.auth_mode == "token" or os.environ.get(config.token_env):
-                config.token()
+            from .command_audit import audit_policy
+            config.http_tokens()
+            audit_policy()
             print(f"配置校验通过：共 {len(config.servers)} 台服务器。尚未测试 SSH 连接。")
         else:
             from .server import create_http_app, run_stdio

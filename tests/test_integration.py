@@ -7,6 +7,7 @@ import contextlib
 import importlib.util
 import json
 import os
+import signal
 import secrets
 import socket
 import tempfile
@@ -59,6 +60,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                 return username == "tester" and key == public_key
 
         self.children = set()
+        self.handlers = set()
         self.ssh_server = await asyncssh.create_server(
             Auth, "127.0.0.1", 0, server_host_keys=[self.host_key],
             process_factory=self.run_process,
@@ -83,14 +85,28 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         await self.manager.shutdown()
         self.ssh_server.close()
         await self.ssh_server.wait_closed()
-        for child in self.children:
-            if child.returncode is None:
-                child.kill()
-            await child.wait()
+        for child in tuple(self.children):
+            self.stop_group(child, signal.SIGKILL)
+        if self.handlers:
+            await asyncio.wait_for(asyncio.gather(*tuple(self.handlers)), 5)
         self.env.stop()
         self.temp.cleanup()
 
+    @staticmethod
+    def stop_group(child, sig):
+        # Each fixture shell owns a private process group, including its pipe-holding children.
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(child.pid, sig)
+
     async def run_process(self, remote):
+        handler = asyncio.current_task()
+        self.handlers.add(handler)
+        try:
+            await self.serve_process(remote)
+        finally:
+            self.handlers.discard(handler)
+
+    async def serve_process(self, remote):
         # Real local subprocesses behind a real encrypted SSH transport.
         master = slave = None
         if remote.term_type:
@@ -106,7 +122,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             local = await asyncio.create_subprocess_exec(
                 "/bin/sh", "-c", remote.command or "/bin/sh",
                 stdin=asyncio.subprocess.PIPE, stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE, cwd=self.root,
+                stderr=asyncio.subprocess.PIPE, cwd=self.root, start_new_session=True,
             )
         self.children.add(local)
 
@@ -124,7 +140,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                         await local.stdin.drain()
             except asyncssh.SignalReceived:
                 if local.returncode is None:
-                    local.terminate()
+                    self.stop_group(local, signal.SIGTERM)
             finally:
                 if master is None:
                     local.stdin.close()
@@ -160,13 +176,17 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             await local.wait()
             await asyncio.gather(*tasks[1:])
             remote.exit(local.returncode)
+        except BrokenPipeError:
+            # The client can close its SSH channel while the final pipe bytes are being forwarded.
+            pass
         finally:
             for task in tasks:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             if local.returncode is None:
-                local.kill()
+                self.stop_group(local, signal.SIGKILL)
                 await local.wait()
+            self.children.discard(local)
             if master is not None:
                 os.close(master)
 
@@ -247,8 +267,23 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(result["stdout"]["text"]), 4096)
         self.assertGreater(result["stdout"]["dropped_chars"], 0)
         self.manager.config = replace(self.config, max_sessions=1)
-        with self.assertRaises(ValueError):
+        active = await self.manager.start("key")
+        self.assertEqual((await self.manager.read(terminal.id))["status"], "completed")
+        with self.assertRaisesRegex(ValueError, "Session limit"):
             await self.manager.start("key")
+        await self.manager.close(active.id)
+
+    async def test_small_file_chunks_do_not_limit_metadata_or_short_writes(self):
+        self.manager.config = replace(self.config, max_file_chunk=32768)
+        mcp, _ = create_server(self.manager.config)
+        await mcp.call_tool("write_file", {"server_id": "key", "path": "small", "data": "abc"})
+        await mcp.call_tool("stat_file", {"server_id": "key", "path": "small"})
+        await mcp.call_tool("list_files", {"server_id": "key", "path": "."})
+        await mcp.call_tool("read_file", {"server_id": "key", "path": "small"})
+        await mcp.call_tool("transfer_file", {"server_id": "key", "remote_path": "small", "direction": "download"})
+        self.assertEqual((self.root / "small").read_text(), "abc")
+        await mcp.call_tool("delete_file", {"server_id": "key", "path": "small"})
+        self.assertFalse((self.root / "small").exists())
 
     async def test_idle_reaper(self):
         self.manager.config = replace(self.config, idle_timeout=1)

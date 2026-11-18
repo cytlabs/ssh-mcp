@@ -11,6 +11,8 @@
     "buffer_chars": 1048576,
     "idle_timeout": 1800,
     "retention_seconds": 600,
+    "max_retained_sessions": 64,
+    "max_retained_chars": 8388608,
     "connect_timeout": 15,
     "file_timeout": 60,
     "max_file_chunk": 262144

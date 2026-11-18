@@ -10,7 +10,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 
 源码已实现多目标配置、密码/密钥认证、主机密钥校验、任意命令、持久 PTY、
 异步输出、SFTP 分块传输、HTTP Bearer 认证、stdio、CLI 及资源限制。
-内置中文管理控制台和 SQLite，配套安装包、部署模板、中文文档和 CI。Web 控制台只提供概览、服务器、操作记录和 MCP 接入；远程终端、文件操作由 MCP 工具提供给 AI 客户端。
+内置中文管理控制台和 SQLite，配套安装包、部署模板、中文文档和 CI。Web 控制台覆盖概览、服务器、操作记录、命令审计、MCP 接入和账户设置。远程终端与文件操作由 MCP 工具提供给 AI 客户端。
 
 **当前是已公开源码的开发预览，不等同于完成生产部署或正式版本验收。**
 
@@ -27,11 +27,22 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 | [MCP-002 / #2](https://github.com/cytlabs/ssh-mcp/issues/2) | 已实现，客户端验收进行中 | 原生 OAuth、发现/DCR、PKCE、密码/Cookie 登录、同意、刷新/撤销和资源受众校验；自动协议及 HTTPS 浏览器流程验收，仍需真实 Codex/ChatGPT 对话。 |
 | [MCP-003 / #1](https://github.com/cytlabs/ssh-mcp/issues/1) | 已部署并完成协议/控制台联调，待真实 AI 客户端验收 | 已恢复 SSH，独立 systemd 服务、SQLite、普通 SSH 账户及可信 IP HTTPS 已上线；公网 MCP SDK、真实 SSH/SFTP、桌面/手机控制台及重启持久化检查通过。真实 AI 对话验收仍未完成。私人地址与凭据不进入仓库。 |
 | [MCP-004 / #4](https://github.com/cytlabs/ssh-mcp/issues/4) | 源码已提交，正式发布待完成 | 仓库已建立为 cytlabs/ssh-mcp。仍需核实私密漏洞报告、软件包命名、依赖记录及发布条件；验收完成后再打标签或发布安装包。 |
-| MCP-005 | 源码已实现，整体验证以最新 CI 为准 | 简洁的四页控制台、浅色与深色主题、服务器搜索/分页、管理记录查询、OAuth 登录及浏览器测试；MCP 终端能力保留但不在网页展示。 |
+| MCP-005 | 源码已实现，整体验证以最新 CI 为准 | 浅色与深色主题、服务器搜索和分页、管理记录、命令审计、OAuth 登录及浏览器测试。三类清单的统一分页与桌面、手机交互见 [PR #17](https://github.com/cytlabs/ssh-mcp/pull/17)。 |
 | [MCP-006 / #3](https://github.com/cytlabs/ssh-mcp/issues/3) | 已实现并通过 CI | Python/npm 依赖锁定、固定应用基础镜像摘要、wheel 资源校验及构建记录上传；三版本测试、浏览器、容器和审计通过。见 [构建说明](docs/reproducible-builds.md)。 |
 | [MCP-007 / #6](https://github.com/cytlabs/ssh-mcp/issues/6) | 已实现并通过 CI | [PR #7](https://github.com/cytlabs/ssh-mcp/pull/7) 增加后端就绪握手、分阶段时限和脱敏诊断，前置失败后跳过依赖步骤；慢启动及异常回归合计 24 项、浏览器、三版本 Python 和容器检查通过。见验证记录。 |
 | [MCP-009 / #11](https://github.com/cytlabs/ssh-mcp/issues/11) | 已加入 workflow，待按最新提交复核 | OAuth HTTPS 浏览器用例已在 CI console 作业中配置，按实际运行记录确认。 |
-| [MCP-008 / #8](https://github.com/cytlabs/ssh-mcp/issues/8) | 待修复 | Python 3.10 完整集成测试通过，但退出时出现子进程 transport 事件循环关闭警告；需定位并等待资源清理，不能隐藏 stderr。 |
+| [MCP-008 / #8](https://github.com/cytlabs/ssh-mcp/issues/8) | 已提交修复 | 本地 SSH 夹具独立管理子进程组，关闭时等待处理器退出。验证包括 Python 3.10 退出日志。 |
+| [#15](https://github.com/cytlabs/ssh-mcp/issues/15) | 已提交修复 | 已结束的命令释放并发名额。输出回读按条数、字符数和时间保留，并发建立中的连接仍计入上限。 |
+
+## 2026 年 11 月控制台和运行稳定性
+
+| 使用场景 | 验收条件 |
+| --- | --- |
+| 服务器、操作记录、命令审计 | 三个列表能选择每页条数、查看总数、跳页，刷新保留各自的每页偏好。命令审计翻页时新增记录不会挤动当前范围。[PR #17](https://github.com/cytlabs/ssh-mcp/pull/17) |
+| 多台服务器排查 | 宽屏直接切换详情，手机可同屏读取名称和状态。轮询保留键盘焦点。后台只把故障及恢复写入操作记录。[PR #17](https://github.com/cytlabs/ssh-mcp/pull/17) |
+| 部署与审计默认值 | 示例静态令牌留空并拦截公开占位令牌。命令正文与交互输入分开控制，交互原文默认关闭。启用审计正文到期清理后保留事件元数据。 |
+| 连续命令与小分块文件 | 已结束命令可回读，同时允许新命令启动。32 KiB 上限下的目录、属性、写入、读取和传输均有回归覆盖。 |
+| 客户端和首次发布 | [#1](https://github.com/cytlabs/ssh-mcp/issues/1)、[#2](https://github.com/cytlabs/ssh-mcp/issues/2) 跟踪真实客户端验证，[#4](https://github.com/cytlabs/ssh-mcp/issues/4) 跟踪首次发布。 |
 
 ## 本轮收尾清单
 
@@ -55,7 +66,7 @@ MCP 服务负责连接和执行，客户端负责理解任务与规划操作。
 1. #6 的测试修复已通过 CI；保留后续运行诊断，继续观察稳定性。
 2. 生产部署与公开 HTTPS 协议检查已完成，继续 #1 的真实 AI 客户端对话验收。
 3. 完成 #2 的 OAuth 在真实 Codex/ChatGPT 等客户端中的体验验收；协议实现已完成，不重复开发认证框架。
-4. 处理 #8 的测试退出清理警告；核对 #4 的发布条件和文档状态，完成后再发布正式版本。
+4. 核对 #8、#15 的修复验证及 #4 的发布条件，汇总对应的发布记录。
 
 ## 0.2 — 客户端覆盖与管理体验
 
